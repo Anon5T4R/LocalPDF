@@ -10,7 +10,7 @@ import { loadPdf, type PDFDocumentProxy } from "../lib/pdfjs";
 import * as ops from "../lib/ops";
 import { readFileBytes, writeFileBytes } from "../lib/backend";
 import { viewportSize, type PageGeom } from "../lib/coords";
-import type { Annot, AnnotMap, PendingImage, Tool } from "../lib/types";
+import type { Annot, AnnotMap, OcrResult, PendingImage, Tool } from "../lib/types";
 
 interface Snapshot {
   bytes: Uint8Array;
@@ -41,6 +41,10 @@ export interface PdfStore {
   selectedAnnot: { page: number; id: string } | null;
   /** assinatura/carimbo esperando o clique que posiciona na página */
   pendingImage: PendingImage | null;
+  /** OCR por página (some quando os bytes mudam — coords ficariam órfãs) */
+  ocrPages: Record<number, OcrResult>;
+  /** destaque temporário do resultado da busca */
+  searchFlash: { page: number; rects: { x: number; y: number; w: number; h: number }[] } | null;
 
   undoStack: Snapshot[];
   redoStack: Snapshot[];
@@ -64,6 +68,10 @@ export interface PdfStore {
   clearSelection(): void;
 
   setPendingImage(p: PendingImage | null): void;
+  setOcrPage(page: number, res: OcrResult): void;
+  setSearchFlash(f: PdfStore["searchFlash"]): void;
+  /** queima o texto do OCR como texto invisível (PDF pesquisável) */
+  makeSearchable(): Promise<void>;
   addAnnot(page: number, annot: Annot): void;
   updateAnnot(page: number, annot: Annot): void;
   removeAnnot(page: number, id: string): void;
@@ -111,6 +119,9 @@ export const useStore = create<PdfStore>()((set, get) => {
       redoStack: opts.pushUndo !== false ? [] : s.redoStack,
       dirty: opts.markDirty !== false,
       selectedAnnot: null,
+      // bytes mudaram → coords/índices do OCR e do flash ficariam órfãos
+      ocrPages: {},
+      searchFlash: null,
       ...(opts.filePath !== undefined ? { filePath: opts.filePath } : {}),
     });
   }
@@ -149,6 +160,8 @@ export const useStore = create<PdfStore>()((set, get) => {
     annots: {},
     selectedAnnot: null,
     pendingImage: null,
+    ocrPages: {},
+    searchFlash: null,
 
     undoStack: [],
     redoStack: [],
@@ -174,6 +187,8 @@ export const useStore = create<PdfStore>()((set, get) => {
         undoStack: [],
         redoStack: [],
         selectedAnnot: null,
+        ocrPages: {},
+        searchFlash: null,
         zoom: "fit",
       });
     },
@@ -266,6 +281,16 @@ export const useStore = create<PdfStore>()((set, get) => {
     setZoom: (zoom) => set({ zoom }),
     setTool: (tool) => set({ tool, selectedAnnot: null, pendingImage: null }),
     setPendingImage: (pendingImage) => set({ pendingImage }),
+    setOcrPage: (page, res) => set((s) => ({ ocrPages: { ...s.ocrPages, [page]: res } })),
+    setSearchFlash: (searchFlash) => set({ searchFlash }),
+
+    makeSearchable: () =>
+      run("gravando texto pesquisável", async () => {
+        const { bytes, ocrPages } = get();
+        if (!bytes) return;
+        const words = Object.fromEntries(Object.entries(ocrPages).map(([k, v]) => [k, v.words]));
+        await applyBytes(await ops.bakeInvisibleText(bytes, words));
+      }),
     setColor: (color) => set({ color }),
     setFontSize: (fontSize) => set({ fontSize }),
     setStrokeWidth: (strokeWidth) => set({ strokeWidth }),

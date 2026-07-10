@@ -1,5 +1,6 @@
 import { memo, useCallback, useEffect, useRef, useState } from "react";
-import { renderPage } from "../lib/pdfjs";
+import { renderPage, renderTextLayer } from "../lib/pdfjs";
+import { getPageItems, groupLines, hitLine, type TextLine } from "../lib/textcache";
 import { useStore } from "../state/store";
 import { newId, type Annot, type TextAnnot } from "../lib/types";
 
@@ -27,10 +28,16 @@ function AnnotLayer(props: { index: number; scale: number }) {
   const setSelectedAnnot = useStore((s) => s.setSelectedAnnot);
   const vp = useStore((s) => s.vpSizes[index]);
 
+  const searchFlash = useStore((s) => s.searchFlash);
+  const docForEdit = useStore((s) => s.doc);
+  const docVersion = useStore((s) => s.docVersion);
+
   const ref = useRef<HTMLDivElement>(null);
   const [rubber, setRubber] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [inkPts, setInkPts] = useState<{ x: number; y: number }[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  const [editLine, setEditLine] = useState<TextLine | null>(null);
+  const cancelLineRef = useRef(false);
   const moveRef = useRef<{ id: string; last: { x: number; y: number } } | null>(null);
   const resizeRef = useRef<{ id: string; last: { x: number; y: number } } | null>(null);
 
@@ -61,6 +68,15 @@ function AnnotLayer(props: { index: number; scale: number }) {
       addAnnot(index, a);
       setPendingImage(null);
       setSelectedAnnot({ page: index, id: a.id });
+      return;
+    }
+    if (tool === "edittext") {
+      // acha a linha de texto sob o clique e abre a edição inline
+      if (!docForEdit) return;
+      getPageItems(docForEdit, docVersion, index).then((items) => {
+        const line = hitLine(groupLines(items), p.x, p.y);
+        setEditLine(line);
+      });
       return;
     }
     if (tool === "highlight") {
@@ -141,7 +157,9 @@ function AnnotLayer(props: { index: number; scale: number }) {
     setSelectedAnnot({ page: index, id: a.id });
     moveRef.current = { id: a.id, last: toV(e) };
     try {
-      (e.currentTarget.closest(".annot-layer") as HTMLElement).setPointerCapture(e.pointerId);
+      // captura no PRÓPRIO elemento: os eventos borbulham até a camada mesmo
+      // quando ela está com pointer-events none (modo selecionar)
+      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
     } catch {
       /* ponteiro já solto */
     }
@@ -153,19 +171,49 @@ function AnnotLayer(props: { index: number; scale: number }) {
     else updateAnnot(index, { ...a, text });
   };
 
+  /** Edição de linha: cobre o original com tarja branca e redesenha o texto. */
+  const commitLine = (line: TextLine, newText: string) => {
+    setEditLine(null);
+    if (newText === line.text) return;
+    const pad = Math.max(1.5, line.h * 0.18);
+    addAnnot(index, {
+      id: newId(),
+      kind: "redact",
+      x: line.x - pad,
+      y: line.y - pad,
+      w: line.w + pad * 2,
+      h: line.h + pad * 2,
+      color: "#ffffff",
+    });
+    if (newText.trim()) {
+      addAnnot(index, {
+        id: newId(),
+        kind: "text",
+        x: line.x,
+        y: line.y,
+        size: Math.round(line.h * 10) / 10,
+        color: "#111111",
+        text: newText,
+      });
+    }
+  };
+
   const px = (v: number) => v * scale;
   const cursor = pendingImage
     ? "copy"
     : tool === "highlight" || tool === "ink"
       ? "crosshair"
-      : tool === "text"
+      : tool === "text" || tool === "edittext"
         ? "text"
         : "default";
+  // no modo selecionar (sem carimbo pendente) a camada deixa o mouse passar
+  // pro textLayer — seleção/cópia de texto; as anotações continuam clicáveis
+  const passthrough = tool === "select" && !pendingImage;
 
   return (
     <div
       ref={ref}
-      className="annot-layer"
+      className={`annot-layer ${passthrough ? "pe-none" : ""}`}
       style={{ cursor }}
       onPointerDown={onPointerDown}
       onPointerMove={onPointerMove}
@@ -173,6 +221,16 @@ function AnnotLayer(props: { index: number; scale: number }) {
     >
       {annots.map((a) => {
         const isSel = selectedAnnot?.page === index && selectedAnnot.id === a.id;
+        if (a.kind === "redact") {
+          return (
+            <div
+              key={a.id}
+              className={`an-redact ${isSel ? "an-sel" : ""}`}
+              style={{ left: px(a.x), top: px(a.y), width: px(a.w), height: px(a.h), background: a.color }}
+              onPointerDown={grabAnnot(a)}
+            />
+          );
+        }
         if (a.kind === "highlight") {
           return (
             <div
@@ -217,7 +275,7 @@ function AnnotLayer(props: { index: number; scale: number }) {
                     e.stopPropagation();
                     resizeRef.current = { id: a.id, last: toV(e) };
                     try {
-                      (e.currentTarget.closest(".annot-layer") as HTMLElement).setPointerCapture(e.pointerId);
+                      (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                     } catch {
                       /* ponteiro já solto */
                     }
@@ -280,6 +338,45 @@ function AnnotLayer(props: { index: number; scale: number }) {
           />
         </svg>
       )}
+      {searchFlash?.page === index &&
+        searchFlash.rects.map((r, i) => (
+          <div
+            key={i}
+            className="search-flash"
+            style={{ left: px(r.x) - 2, top: px(r.y) - 2, width: px(r.w) + 4, height: px(r.h) + 4 }}
+          />
+        ))}
+      {editLine && (
+        <input
+          className="an-line-edit"
+          style={{
+            left: px(editLine.x) - 2,
+            top: px(editLine.y) - 2,
+            width: Math.max(px(editLine.w) + 60, 120),
+            fontSize: px(editLine.h) * 0.92,
+          }}
+          defaultValue={editLine.text}
+          autoFocus
+          onFocus={(e) => e.target.select()}
+          onBlur={(e) => {
+            if (cancelLineRef.current) {
+              cancelLineRef.current = false;
+              setEditLine(null);
+            } else {
+              commitLine(editLine, e.target.value);
+            }
+          }}
+          onKeyDown={(e) => {
+            if (e.key === "Enter") (e.target as HTMLInputElement).blur();
+            if (e.key === "Escape") {
+              cancelLineRef.current = true;
+              (e.target as HTMLInputElement).blur();
+            }
+            e.stopPropagation();
+          }}
+          onPointerDown={(e) => e.stopPropagation()}
+        />
+      )}
     </div>
   );
 }
@@ -293,7 +390,9 @@ const PageView = memo(function PageView(props: { index: number; scale: number })
   const doc = useStore((s) => s.doc);
   const docVersion = useStore((s) => s.docVersion);
   const vp = useStore((s) => s.vpSizes[index]);
+  const setSelectedAnnot = useStore((s) => s.setSelectedAnnot);
   const canvasRef = useRef<HTMLCanvasElement>(null);
+  const textRef = useRef<HTMLDivElement>(null);
   const wrapRef = useRef<HTMLDivElement>(null);
   const [visible, setVisible] = useState(false);
 
@@ -315,12 +414,34 @@ const PageView = memo(function PageView(props: { index: number; scale: number })
     return () => r.cancel();
   }, [visible, doc, docVersion, index, scale]);
 
+  // camada de texto selecionável (cópia + realce a partir da seleção)
+  useEffect(() => {
+    if (!visible || !doc || !textRef.current) return;
+    const r = renderTextLayer(doc, index + 1, textRef.current, scale);
+    return () => r.cancel();
+  }, [visible, doc, docVersion, index, scale]);
+
+  // clique no "vazio" da página (fora de anotação) desfaz a seleção de annot
+  const onPagePointerDown = (e: React.PointerEvent) => {
+    const t = e.target as HTMLElement;
+    if (!t.closest?.(".an-highlight,.an-text,.an-image,.an-redact,.an-resize,polyline")) {
+      setSelectedAnnot(null);
+    }
+  };
+
   if (!vp) return null;
   const w = Math.floor(vp.w * scale);
   const h = Math.floor(vp.h * scale);
   return (
-    <div ref={wrapRef} className="page" data-page={index} style={{ width: w, height: h }}>
+    <div
+      ref={wrapRef}
+      className="page"
+      data-page={index}
+      style={{ width: w, height: h }}
+      onPointerDown={onPagePointerDown}
+    >
       <canvas ref={canvasRef} />
+      <div ref={textRef} className="textLayer" />
       <AnnotLayer index={index} scale={scale} />
     </div>
   );
@@ -370,6 +491,59 @@ export default function Viewer() {
 
   const scale = zoom === "fit" ? fitScale : zoom;
 
+  // seleção de texto (textLayer) → botão flutuante "Realçar"
+  const addAnnot = useStore((s) => s.addAnnot);
+  const color = useStore((s) => s.color);
+  const [selBtn, setSelBtn] = useState<{ x: number; y: number } | null>(null);
+
+  useEffect(() => {
+    const onSel = () => {
+      const sel = document.getSelection();
+      if (!sel || sel.isCollapsed || !sel.rangeCount) return setSelBtn(null);
+      const node = sel.anchorNode;
+      const el = node instanceof Element ? node : node?.parentElement;
+      if (!el?.closest(".textLayer")) return setSelBtn(null);
+      const rects = sel.getRangeAt(0).getClientRects();
+      if (!rects.length) return setSelBtn(null);
+      const last = rects[rects.length - 1];
+      setSelBtn({ x: last.right, y: last.top });
+    };
+    document.addEventListener("selectionchange", onSel);
+    return () => document.removeEventListener("selectionchange", onSel);
+  }, []);
+
+  const highlightSelection = () => {
+    const sel = document.getSelection();
+    if (!sel || sel.isCollapsed || !sel.rangeCount) return;
+    const rects = [...sel.getRangeAt(0).getClientRects()].filter((r) => r.width > 2 && r.height > 2);
+    const kept: DOMRect[] = [];
+    for (const r of rects) {
+      // os spans do textLayer geram retângulos duplicados/contidos — filtra
+      if (kept.some((k) => r.left >= k.left - 1 && r.right <= k.right + 1 && r.top >= k.top - 1 && r.bottom <= k.bottom + 1)) continue;
+      kept.push(r);
+    }
+    ref.current?.querySelectorAll<HTMLElement>(".page").forEach((pageEl) => {
+      const pr = pageEl.getBoundingClientRect();
+      const idx = Number(pageEl.dataset.page);
+      for (const r of kept) {
+        const cx = (r.left + r.right) / 2;
+        const cy = (r.top + r.bottom) / 2;
+        if (cx < pr.left || cx > pr.right || cy < pr.top || cy > pr.bottom) continue;
+        addAnnot(idx, {
+          id: newId(),
+          kind: "highlight",
+          x: (r.left - pr.left) / scale,
+          y: (r.top - pr.top) / scale,
+          w: r.width / scale,
+          h: r.height / scale,
+          color,
+        });
+      }
+    });
+    sel.removeAllRanges();
+    setSelBtn(null);
+  };
+
   // página atual = a mais próxima do meio da janela de rolagem
   const onScroll = () => {
     const el = ref.current;
@@ -406,6 +580,17 @@ export default function Viewer() {
           <PageView key={i} index={i} scale={scale} />
         ))}
       </div>
+      {selBtn && (
+        <button
+          className="sel-hl-btn"
+          style={{ left: selBtn.x + 8, top: selBtn.y - 34 }}
+          onPointerDown={(e) => e.preventDefault()}
+          onMouseDown={(e) => e.preventDefault()}
+          onClick={highlightSelection}
+        >
+          🖍 Realçar
+        </button>
+      )}
     </div>
   );
 }

@@ -6,6 +6,7 @@ import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import {
   allPageGeoms,
   bakeAnnotations,
+  bakeInvisibleText,
   deletePages,
   extractPages,
   fillForm,
@@ -140,6 +141,26 @@ describe("bakeAnnotations", () => {
     const bytes = await makePdf(1);
     expect(await bakeAnnotations(bytes, {})).toBe(bytes);
     expect(await bakeAnnotations(bytes, { 0: [] })).toBe(bytes);
+  });
+});
+
+describe("bakeInvisibleText (OCR → PDF pesquisável)", () => {
+  it("grava as palavras sem mudar contagem de páginas nem lançar", async () => {
+    const bytes = await makePdf(2);
+    const out = await bakeInvisibleText(bytes, {
+      0: [
+        { text: "Fatura", x: 40, y: 60, w: 80, h: 16 },
+        { text: "nº 1234", x: 130, y: 60, w: 60, h: 16 },
+      ],
+      1: [{ text: "página escaneada", x: 40, y: 100, w: 200, h: 14 }],
+    });
+    expect(await widths(out)).toEqual([500, 501]);
+    expect(out.length).toBeGreaterThan(bytes.length);
+  });
+  it("sem palavras devolve os mesmos bytes", async () => {
+    const bytes = await makePdf(1);
+    expect(await bakeInvisibleText(bytes, {})).toBe(bytes);
+    expect(await bakeInvisibleText(bytes, { 0: [] })).toBe(bytes);
   });
 });
 

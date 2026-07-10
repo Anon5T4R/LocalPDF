@@ -1,5 +1,8 @@
 import ReactDOM from "react-dom/client";
 import App from "./App";
+import { initTheme } from "./lib/theme";
+
+initTheme();
 
 // Sem StrictMode (lição da suíte): efeitos duplicados disparam renders
 // duplicados do pdf.js no mesmo canvas.

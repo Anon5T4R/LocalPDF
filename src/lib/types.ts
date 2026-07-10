@@ -6,7 +6,7 @@
 // basta multiplicar pela escala; pra "queimar" no PDF, `coords.ts` converte
 // pro espaço do usuário do PDF (y pra cima, sem rotação).
 
-export type Tool = "select" | "highlight" | "text" | "ink";
+export type Tool = "select" | "highlight" | "text" | "ink" | "edittext";
 
 export interface HighlightAnnot {
   id: string;
@@ -47,7 +47,32 @@ export interface ImageAnnot {
   dataUrl: string;
 }
 
-export type Annot = HighlightAnnot | TextAnnot | InkAnnot | ImageAnnot;
+/** Tarja sólida (cobre o conteúdo original — base da edição de texto de linha). */
+export interface RedactAnnot {
+  id: string;
+  kind: "redact";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  color: string;
+}
+
+export type Annot = HighlightAnnot | TextAnnot | InkAnnot | ImageAnnot | RedactAnnot;
+
+/** Palavra reconhecida pelo OCR, em coords do viewport escala 1. */
+export interface OcrWord {
+  text: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+export interface OcrResult {
+  text: string;
+  words: OcrWord[];
+}
 
 /** Imagem aguardando o clique que a posiciona na página (assinatura/carimbo). */
 export interface PendingImage {

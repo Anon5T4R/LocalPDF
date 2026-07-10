@@ -39,6 +39,9 @@ jobs:
       - name: Install JS deps
         run: npm ci
 
+      - name: Montar assets do OCR (tesseract)
+        run: bash scripts/fetch-tessdata.sh
+
       - name: Frontend build + testes
         run: |
           npm run build

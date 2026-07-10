@@ -17,7 +17,7 @@ import {
   PDFRadioGroup,
   PDFTextField,
 } from "pdf-lib";
-import type { Annot, AnnotMap, FieldInfo } from "./types";
+import type { Annot, AnnotMap, FieldInfo, OcrWord } from "./types";
 import { hexToRgb01, normalizeRotation, sanitizeWinAnsi, toPdfPoint, toPdfRect, type PageGeom } from "./coords";
 
 const load = (bytes: Uint8Array) => PDFDocument.load(bytes, { ignoreEncryption: true, updateMetadata: false });
@@ -122,6 +122,9 @@ export async function bakeAnnotations(bytes: Uint8Array, annots: AnnotMap): Prom
           opacity: 0.35,
           blendMode: BlendMode.Multiply,
         });
+      } else if (a.kind === "redact") {
+        const rect = toPdfRect(g, a.x, a.y, a.w, a.h);
+        page.drawRectangle({ x: rect.x, y: rect.y, width: rect.w, height: rect.h, color, opacity: 1 });
       } else if (a.kind === "ink") {
         for (let i = 1; i < a.points.length; i++) {
           const p0 = toPdfPoint(g, a.points[i - 1].x, a.points[i - 1].y);
@@ -164,6 +167,41 @@ export async function bakeAnnotations(bytes: Uint8Array, annots: AnnotMap): Prom
           rotate: degrees(g.rotation),
         });
       }
+    }
+  }
+  return saveDoc(doc);
+}
+
+/**
+ * Queima o texto do OCR como texto INVISÍVEL (opacity 0) sobre cada palavra —
+ * o PDF escaneado vira pesquisável/copiável sem mudar a aparência.
+ */
+export async function bakeInvisibleText(
+  bytes: Uint8Array,
+  wordsByPage: Record<number, OcrWord[]>
+): Promise<Uint8Array> {
+  const entries = Object.entries(wordsByPage).filter(([, words]) => words.length > 0);
+  if (!entries.length) return bytes;
+  const doc = await load(bytes);
+  const font = await doc.embedFont(StandardFonts.Helvetica);
+  for (const [key, words] of entries) {
+    const index = Number(key);
+    if (index < 0 || index >= doc.getPageCount()) continue;
+    const page = doc.getPage(index);
+    const g = pageGeom(doc, index);
+    for (const w of words) {
+      const text = sanitizeWinAnsi(w.text).trim();
+      if (!text) continue;
+      const size = Math.max(4, w.h);
+      const anchor = toPdfPoint(g, w.x, w.y + w.h * 0.85);
+      page.drawText(text, {
+        x: anchor.x,
+        y: anchor.y,
+        size,
+        font,
+        opacity: 0,
+        rotate: degrees(g.rotation),
+      });
     }
   }
   return saveDoc(doc);

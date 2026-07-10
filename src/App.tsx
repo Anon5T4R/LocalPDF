@@ -10,10 +10,12 @@ import Thumbnails from "./components/Thumbnails";
 import Viewer from "./components/Viewer";
 import FormsPanel from "./components/FormsPanel";
 import AiPanel from "./components/AiPanel";
+import OcrPanel from "./components/OcrPanel";
+import SearchBar from "./components/SearchBar";
 import StartScreen from "./components/StartScreen";
 import "./App.css";
 
-export type SidePanel = "none" | "forms" | "ai";
+export type SidePanel = "none" | "forms" | "ai" | "ocr";
 
 const RECENT_KEY = "localpdf.recent";
 
@@ -36,7 +38,6 @@ function pushRecent(path: string) {
 export default function App() {
   const doc = useStore((s) => s.doc);
   const filePath = useStore((s) => s.filePath);
-  const dirty = useStore((s) => s.dirty);
   const busy = useStore((s) => s.busy);
   const error = useStore((s) => s.error);
   const openFile = useStore((s) => s.openFile);
@@ -49,6 +50,7 @@ export default function App() {
   const removeAnnot = useStore((s) => s.removeAnnot);
 
   const [panel, setPanel] = useState<SidePanel>("none");
+  const [searchOpen, setSearchOpen] = useState(false);
 
   const doOpenDialog = useCallback(async () => {
     const picked = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
@@ -137,6 +139,9 @@ export default function App() {
       if (mod && e.key.toLowerCase() === "o") {
         e.preventDefault();
         doOpenDialog();
+      } else if (mod && e.key.toLowerCase() === "f") {
+        e.preventDefault();
+        setSearchOpen(true);
       } else if (mod && e.key.toLowerCase() === "s") {
         e.preventDefault();
         if (e.shiftKey) doSaveAs();
@@ -157,13 +162,22 @@ export default function App() {
 
   return (
     <div className="app">
-      <TopBar onOpen={doOpenDialog} onSave={doSave} onSaveAs={doSaveAs} panel={panel} setPanel={setPanel} />
+      <TopBar
+        onOpen={doOpenDialog}
+        onSave={doSave}
+        onSaveAs={doSaveAs}
+        onSearch={() => setSearchOpen(true)}
+        panel={panel}
+        setPanel={setPanel}
+      />
       {doc ? (
         <div className="main">
           <Thumbnails />
           <Viewer />
+          {searchOpen && <SearchBar onClose={() => setSearchOpen(false)} />}
           {panel === "forms" && <FormsPanel />}
           {panel === "ai" && <AiPanel />}
+          {panel === "ocr" && <OcrPanel />}
         </div>
       ) : (
         <StartScreen onOpen={doOpenDialog} />
@@ -178,7 +192,6 @@ export default function App() {
           ⚠ {error} <span className="error-close">×</span>
         </div>
       )}
-      {dirty && <div className="dirty-dot" title="Alterações não salvas" />}
     </div>
   );
 }

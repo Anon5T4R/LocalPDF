@@ -57,6 +57,15 @@ jobs:
       - name: Install JS deps
         run: npm ci
 
+      - name: Montar assets do OCR (tesseract) — Windows
+        if: matrix.platform == 'windows-latest'
+        shell: pwsh
+        run: powershell -ExecutionPolicy Bypass -File scripts/fetch-tessdata.ps1
+
+      - name: Montar assets do OCR (tesseract) — Linux
+        if: matrix.platform == 'ubuntu-22.04'
+        run: bash scripts/fetch-tessdata.sh
+
       - name: Baixar runtime de IA (llama.cpp) — Windows
         if: matrix.platform == 'windows-latest'
         shell: pwsh

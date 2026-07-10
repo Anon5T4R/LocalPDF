@@ -57,6 +57,60 @@ export function renderPage(
   };
 }
 
+/** Item de texto com posição, em coords do viewport escala 1 (y = topo). */
+export interface PageTextItem {
+  str: string;
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+}
+
+/** Itens de texto posicionados de uma página (busca, flash, edição de linha). */
+export async function pageTextItems(doc: PDFDocumentProxy, pageNumber: number): Promise<PageTextItem[]> {
+  const page = await doc.getPage(pageNumber);
+  const vp = page.getViewport({ scale: 1 });
+  const content = await page.getTextContent();
+  const out: PageTextItem[] = [];
+  for (const it of content.items) {
+    if (!("str" in it) || !it.str.trim()) continue;
+    const tx = pdfjs.Util.transform(vp.transform, it.transform);
+    const h = Math.hypot(tx[2], tx[3]) || 10;
+    out.push({ str: it.str, x: tx[4], y: tx[5] - h * 0.85, w: it.width, h });
+  }
+  return out;
+}
+
+/** Renderiza a camada de texto selecionável do pdf.js dentro do container. */
+export function renderTextLayer(
+  doc: PDFDocumentProxy,
+  pageNumber: number,
+  container: HTMLDivElement,
+  scale: number
+): { promise: Promise<void>; cancel: () => void } {
+  let layer: InstanceType<typeof pdfjs.TextLayer> | null = null;
+  let cancelled = false;
+  const promise = (async () => {
+    const page = await doc.getPage(pageNumber);
+    if (cancelled) return;
+    container.textContent = "";
+    container.style.setProperty("--scale-factor", String(scale));
+    layer = new pdfjs.TextLayer({
+      textContentSource: page.streamTextContent(),
+      container,
+      viewport: page.getViewport({ scale }),
+    });
+    await layer.render();
+  })().catch(() => {});
+  return {
+    promise,
+    cancel: () => {
+      cancelled = true;
+      layer?.cancel();
+    },
+  };
+}
+
 /** Texto de todas as páginas (uma string por página). */
 export async function extractAllText(doc: PDFDocumentProxy): Promise<string[]> {
   const out: string[] = [];

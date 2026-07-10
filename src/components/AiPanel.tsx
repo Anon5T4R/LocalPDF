@@ -9,7 +9,7 @@ import {
   summarizeDoc,
   type ModelInfo,
 } from "../lib/ai";
-import { extractAllText } from "../lib/pdfjs";
+import { getMergedPagesText } from "../lib/textcache";
 import { useStore } from "../state/store";
 
 const DIR_KEY = "localpdf.modelsDir";
@@ -85,11 +85,11 @@ export default function AiPanel() {
     if (!doc) throw new Error("nenhum documento aberto");
     if (textCache.current?.version === docVersion) return textCache.current.pages;
     setNote("extraindo texto do PDF…");
-    const pages = await extractAllText(doc);
+    const pages = await getMergedPagesText(doc, docVersion, useStore.getState().ocrPages);
     textCache.current = { version: docVersion, pages };
     setNote("");
     if (!pages.some((p) => p.trim())) {
-      throw new Error("este PDF não tem texto extraível (provavelmente escaneado — OCR ainda não implementado)");
+      throw new Error("este PDF não tem texto extraível — é escaneado; rode o 🔍 OCR primeiro");
     }
     return pages;
   };

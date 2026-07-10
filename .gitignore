@@ -31,3 +31,8 @@ src-tauri/target
 # Keep the placeholder so Tauri's `resources` glob is never empty.
 src-tauri/binaries/llama/*
 !src-tauri/binaries/llama/placeholder.txt
+
+# OCR runtime (worker/core do tesseract.js + traineddata) — montado por
+# scripts/fetch-tessdata.{ps1,sh}, não versionado.
+public/tesseract/
+
