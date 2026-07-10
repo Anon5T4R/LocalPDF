@@ -77,6 +77,18 @@ export async function mergePdf(bytes: Uint8Array, otherBytes: Uint8Array): Promi
   return saveDoc(doc);
 }
 
+/** Insere uma página em branco em `index`, do tamanho da página vizinha. */
+export async function insertBlankPage(bytes: Uint8Array, index: number): Promise<Uint8Array> {
+  const doc = await load(bytes);
+  const n = doc.getPageCount();
+  const at = Math.max(0, Math.min(index, n));
+  // tamanho copiado da página ANTES do ponto de inserção ("em branco depois da atual")
+  const ref = doc.getPage(Math.max(0, Math.min(at - 1, n - 1)));
+  const { width, height } = ref.getSize();
+  doc.insertPage(at, [width, height]);
+  return saveDoc(doc);
+}
+
 function pageGeom(doc: PDFDocument, index: number): PageGeom {
   const page = doc.getPage(index);
   const { width, height } = page.getSize();
@@ -97,7 +109,7 @@ export async function bakeAnnotations(bytes: Uint8Array, annots: AnnotMap): Prom
     const g = pageGeom(doc, index);
 
     for (const a of list as Annot[]) {
-      const { r, g: gr, b } = hexToRgb01(a.kind === "highlight" ? a.color : (a as { color: string }).color);
+      const { r, g: gr, b } = hexToRgb01("color" in a ? a.color : "#000000");
       const color = rgb(r, gr, b);
       if (a.kind === "highlight") {
         const rect = toPdfRect(g, a.x, a.y, a.w, a.h);
@@ -135,6 +147,20 @@ export async function bakeAnnotations(bytes: Uint8Array, annots: AnnotMap): Prom
           font,
           color,
           lineHeight: a.size * 1.25,
+          rotate: degrees(g.rotation),
+        });
+      } else if (a.kind === "image") {
+        const img = a.dataUrl.startsWith("data:image/jpeg")
+          ? await doc.embedJpg(a.dataUrl)
+          : await doc.embedPng(a.dataUrl);
+        // âncora do drawImage = canto inferior esquerdo VISUAL da imagem;
+        // com rotate=g.rotation ela fica de pé na orientação exibida
+        const anchor = toPdfPoint(g, a.x, a.y + a.h);
+        page.drawImage(img, {
+          x: anchor.x,
+          y: anchor.y,
+          width: a.w,
+          height: a.h,
           rotate: degrees(g.rotation),
         });
       }

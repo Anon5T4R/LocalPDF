@@ -49,6 +49,7 @@ export default function Thumbnails() {
   const rotateSelected = useStore((s) => s.rotateSelected);
   const deleteSelected = useStore((s) => s.deleteSelected);
   const extractSelected = useStore((s) => s.extractSelected);
+  const insertBlankAfter = useStore((s) => s.insertBlankAfter);
   const movePages = useStore((s) => s.movePages);
   const busy = useStore((s) => s.busy);
   const [dropAt, setDropAt] = useState<number | null>(null);
@@ -114,6 +115,13 @@ export default function Thumbnails() {
         </button>
         <button onClick={doExtract} disabled={!!busy} title={`Extrair ${nSel} página(s) pra um novo PDF`}>
           ⇱
+        </button>
+        <button
+          onClick={() => insertBlankAfter(selected.length ? Math.max(...selected) : current)}
+          disabled={!!busy}
+          title="Inserir página em branco depois da atual"
+        >
+          ＋
         </button>
         <button
           onClick={deleteSelected}

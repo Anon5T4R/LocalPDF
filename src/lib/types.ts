@@ -36,7 +36,25 @@ export interface InkAnnot {
   width: number;
 }
 
-export type Annot = HighlightAnnot | TextAnnot | InkAnnot;
+/** Imagem carimbada na página (assinatura, logo, carimbo) — PNG/JPEG em dataURL. */
+export interface ImageAnnot {
+  id: string;
+  kind: "image";
+  x: number;
+  y: number;
+  w: number;
+  h: number;
+  dataUrl: string;
+}
+
+export type Annot = HighlightAnnot | TextAnnot | InkAnnot | ImageAnnot;
+
+/** Imagem aguardando o clique que a posiciona na página (assinatura/carimbo). */
+export interface PendingImage {
+  dataUrl: string;
+  /** proporção natural altura/largura (pra dimensionar no clique) */
+  aspect: number;
+}
 
 /** Anotações pendentes (ainda não queimadas no PDF), por índice de página. */
 export type AnnotMap = Record<number, Annot[]>;

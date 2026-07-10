@@ -10,7 +10,7 @@ import { loadPdf, type PDFDocumentProxy } from "../lib/pdfjs";
 import * as ops from "../lib/ops";
 import { readFileBytes, writeFileBytes } from "../lib/backend";
 import { viewportSize, type PageGeom } from "../lib/coords";
-import type { Annot, AnnotMap, Tool } from "../lib/types";
+import type { Annot, AnnotMap, PendingImage, Tool } from "../lib/types";
 
 interface Snapshot {
   bytes: Uint8Array;
@@ -39,6 +39,8 @@ export interface PdfStore {
   strokeWidth: number;
   annots: AnnotMap;
   selectedAnnot: { page: number; id: string } | null;
+  /** assinatura/carimbo esperando o clique que posiciona na página */
+  pendingImage: PendingImage | null;
 
   undoStack: Snapshot[];
   redoStack: Snapshot[];
@@ -61,6 +63,7 @@ export interface PdfStore {
   selectPage(i: number, additive: boolean): void;
   clearSelection(): void;
 
+  setPendingImage(p: PendingImage | null): void;
   addAnnot(page: number, annot: Annot): void;
   updateAnnot(page: number, annot: Annot): void;
   removeAnnot(page: number, id: string): void;
@@ -69,6 +72,7 @@ export interface PdfStore {
   rotateSelected(delta: number): Promise<void>;
   deleteSelected(): Promise<void>;
   movePages(src: number[], dest: number): Promise<void>;
+  insertBlankAfter(index: number): Promise<void>;
   mergeWith(path: string): Promise<void>;
   extractSelected(path: string): Promise<void>;
   applyFormValues(values: Record<string, string | boolean>): Promise<void>;
@@ -144,6 +148,7 @@ export const useStore = create<PdfStore>()((set, get) => {
     strokeWidth: 2,
     annots: {},
     selectedAnnot: null,
+    pendingImage: null,
 
     undoStack: [],
     redoStack: [],
@@ -259,7 +264,8 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     setZoom: (zoom) => set({ zoom }),
-    setTool: (tool) => set({ tool, selectedAnnot: null }),
+    setTool: (tool) => set({ tool, selectedAnnot: null, pendingImage: null }),
+    setPendingImage: (pendingImage) => set({ pendingImage }),
     setColor: (color) => set({ color }),
     setFontSize: (fontSize) => set({ fontSize }),
     setStrokeWidth: (strokeWidth) => set({ strokeWidth }),
@@ -353,6 +359,23 @@ export const useStore = create<PdfStore>()((set, get) => {
           .map((oldIdx, newIdx) => (moving.includes(oldIdx) ? newIdx : -1))
           .filter((x) => x >= 0);
         set({ selected: newSel });
+      }),
+
+    insertBlankAfter: (index) =>
+      run("inserindo página", async () => {
+        const { bytes } = get();
+        if (!bytes) return;
+        const at = index + 1;
+        await applyBytes(await ops.insertBlankPage(bytes, at), {
+          remapAnnots: (annots) => {
+            const out: AnnotMap = {};
+            for (const [k, list] of Object.entries(annots)) {
+              const i = Number(k);
+              out[i >= at ? i + 1 : i] = list;
+            }
+            return out;
+          },
+        });
       }),
 
     mergeWith: (path) =>

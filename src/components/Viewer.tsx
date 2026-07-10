@@ -19,16 +19,20 @@ function AnnotLayer(props: { index: number; scale: number }) {
   const strokeWidth = useStore((s) => s.strokeWidth);
   const annots = useStore((s) => s.annots[index] ?? NO_ANNOTS);
   const selectedAnnot = useStore((s) => s.selectedAnnot);
+  const pendingImage = useStore((s) => s.pendingImage);
+  const setPendingImage = useStore((s) => s.setPendingImage);
   const addAnnot = useStore((s) => s.addAnnot);
   const updateAnnot = useStore((s) => s.updateAnnot);
   const removeAnnot = useStore((s) => s.removeAnnot);
   const setSelectedAnnot = useStore((s) => s.setSelectedAnnot);
+  const vp = useStore((s) => s.vpSizes[index]);
 
   const ref = useRef<HTMLDivElement>(null);
   const [rubber, setRubber] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [inkPts, setInkPts] = useState<{ x: number; y: number }[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
   const moveRef = useRef<{ id: string; last: { x: number; y: number } } | null>(null);
+  const resizeRef = useRef<{ id: string; last: { x: number; y: number } } | null>(null);
 
   const toV = useCallback(
     (e: { clientX: number; clientY: number }) => {
@@ -41,6 +45,24 @@ function AnnotLayer(props: { index: number; scale: number }) {
   const onPointerDown = (e: React.PointerEvent) => {
     if (e.button !== 0) return;
     const p = toV(e);
+    if (pendingImage) {
+      // posiciona a assinatura/carimbo centrado no clique
+      const w = Math.min(180, (vp?.w ?? 400) * 0.5);
+      const h = w * pendingImage.aspect;
+      const a = {
+        id: newId(),
+        kind: "image" as const,
+        x: p.x - w / 2,
+        y: p.y - h / 2,
+        w,
+        h,
+        dataUrl: pendingImage.dataUrl,
+      };
+      addAnnot(index, a);
+      setPendingImage(null);
+      setSelectedAnnot({ page: index, id: a.id });
+      return;
+    }
     if (tool === "highlight") {
       setRubber({ x0: p.x, y0: p.y, x1: p.x, y1: p.y });
     } else if (tool === "ink") {
@@ -70,6 +92,15 @@ function AnnotLayer(props: { index: number; scale: number }) {
     } else if (inkPts) {
       const p = toV(e);
       setInkPts((pts) => (pts ? [...pts, p] : pts));
+    } else if (resizeRef.current) {
+      const p = toV(e);
+      const m = resizeRef.current;
+      const dx = p.x - m.last.x;
+      m.last = p;
+      const a = (useStore.getState().annots[index] ?? []).find((x) => x.id === m.id);
+      if (!a || a.kind !== "image") return;
+      const w = Math.max(16, a.w + dx);
+      updateAnnot(index, { ...a, w, h: (w * a.h) / a.w });
     } else if (moveRef.current) {
       const p = toV(e);
       const m = moveRef.current;
@@ -101,6 +132,7 @@ function AnnotLayer(props: { index: number; scale: number }) {
       setInkPts(null);
     }
     moveRef.current = null;
+    resizeRef.current = null;
   };
 
   const grabAnnot = (a: Annot) => (e: React.PointerEvent) => {
@@ -122,8 +154,13 @@ function AnnotLayer(props: { index: number; scale: number }) {
   };
 
   const px = (v: number) => v * scale;
-  const cursor =
-    tool === "highlight" || tool === "ink" ? "crosshair" : tool === "text" ? "text" : "default";
+  const cursor = pendingImage
+    ? "copy"
+    : tool === "highlight" || tool === "ink"
+      ? "crosshair"
+      : tool === "text"
+        ? "text"
+        : "default";
 
   return (
     <div
@@ -161,6 +198,33 @@ function AnnotLayer(props: { index: number; scale: number }) {
                 onPointerDown={grabAnnot(a) as unknown as React.PointerEventHandler<SVGPolylineElement>}
               />
             </svg>
+          );
+        }
+        if (a.kind === "image") {
+          return (
+            <div
+              key={a.id}
+              className={`an-image ${isSel ? "an-sel" : ""}`}
+              style={{ left: px(a.x), top: px(a.y), width: px(a.w), height: px(a.h) }}
+              onPointerDown={grabAnnot(a)}
+            >
+              <img src={a.dataUrl} alt="" draggable={false} />
+              {isSel && (
+                <div
+                  className="an-resize"
+                  onPointerDown={(e) => {
+                    if (e.button !== 0) return;
+                    e.stopPropagation();
+                    resizeRef.current = { id: a.id, last: toV(e) };
+                    try {
+                      (e.currentTarget.closest(".annot-layer") as HTMLElement).setPointerCapture(e.pointerId);
+                    } catch {
+                      /* ponteiro já solto */
+                    }
+                  }}
+                />
+              )}
+            </div>
           );
         }
         // text
@@ -270,9 +334,25 @@ export default function Viewer() {
   const pageCount = useStore((s) => s.vpSizes.length);
   const vpSizes = useStore((s) => s.vpSizes);
   const zoom = useStore((s) => s.zoom);
+  const setZoom = useStore((s) => s.setZoom);
   const setCurrent = useStore((s) => s.setCurrent);
   const ref = useRef<HTMLDivElement>(null);
   const [fitScale, setFitScale] = useState(1);
+
+  // Ctrl+roda = zoom (listener não-passivo, senão o preventDefault não vale)
+  useEffect(() => {
+    const el = ref.current;
+    if (!el) return;
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return;
+      e.preventDefault();
+      const s = useStore.getState();
+      const cur = typeof s.zoom === "number" ? s.zoom : fitScale;
+      setZoom(Math.min(4, Math.max(0.25, Math.round(cur * (e.deltaY < 0 ? 1.1 : 0.9) * 100) / 100)));
+    };
+    el.addEventListener("wheel", onWheel, { passive: false });
+    return () => el.removeEventListener("wheel", onWheel);
+  }, [fitScale, setZoom]);
 
   // "ajustar à largura": maior página cabe no container
   useEffect(() => {

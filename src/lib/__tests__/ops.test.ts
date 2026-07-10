@@ -9,6 +9,7 @@ import {
   deletePages,
   extractPages,
   fillForm,
+  insertBlankPage,
   listFormFields,
   mergePdf,
   reorderPages,
@@ -83,7 +84,34 @@ describe("extractPages / mergePdf", () => {
   });
 });
 
+describe("insertBlankPage", () => {
+  it("insere no meio com o tamanho da vizinha", async () => {
+    const bytes = await makePdf(3);
+    const out = await insertBlankPage(bytes, 1);
+    expect(await widths(out)).toEqual([500, 500, 501, 502]); // nova copia a página 1 (500)
+  });
+  it("insere no fim", async () => {
+    const bytes = await makePdf(2);
+    const out = await insertBlankPage(bytes, 2);
+    expect(await widths(out)).toEqual([500, 501, 501]);
+  });
+});
+
+// PNG 1x1 vermelho (menor PNG válido) pra testar o carimbo de imagem
+const TINY_PNG =
+  "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+
 describe("bakeAnnotations", () => {
+  it("queima imagem (assinatura/carimbo), inclusive em página rotacionada", async () => {
+    let bytes = await makePdf(2);
+    bytes = await rotatePages(bytes, [1], 90);
+    const out = await bakeAnnotations(bytes, {
+      0: [{ id: "s1", kind: "image", x: 40, y: 600, w: 120, h: 60, dataUrl: TINY_PNG }],
+      1: [{ id: "s2", kind: "image", x: 40, y: 100, w: 80, h: 40, dataUrl: TINY_PNG }],
+    });
+    expect(await widths(out)).toEqual([500, 501]);
+    expect(out.length).toBeGreaterThan(bytes.length);
+  });
   it("queima realce/texto/desenho sem corromper o documento", async () => {
     const bytes = await makePdf(2);
     const out = await bakeAnnotations(bytes, {

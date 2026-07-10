@@ -1,7 +1,10 @@
+import { useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
+import { readFileBytes } from "../lib/backend";
 import { useStore } from "../state/store";
 import type { SidePanel } from "../App";
 import type { Tool } from "../lib/types";
+import SignatureModal from "./SignatureModal";
 
 const TOOLS: { id: Tool; icon: string; label: string }[] = [
   { id: "select", icon: "🖱", label: "Selecionar / mover" },
@@ -35,6 +38,14 @@ export default function TopBar(props: {
   const current = useStore((s) => s.current);
   const pageCount = useStore((s) => s.vpSizes.length);
   const mergeWith = useStore((s) => s.mergeWith);
+  const fontSize = useStore((s) => s.fontSize);
+  const setFontSize = useStore((s) => s.setFontSize);
+  const strokeWidth = useStore((s) => s.strokeWidth);
+  const setStrokeWidth = useStore((s) => s.setStrokeWidth);
+  const pendingImage = useStore((s) => s.pendingImage);
+  const setPendingImage = useStore((s) => s.setPendingImage);
+  const [sigOpen, setSigOpen] = useState(false);
+  const [pageInput, setPageInput] = useState<string | null>(null);
 
   const zoomNum = typeof zoom === "number" ? zoom : null;
   const bumpZoom = (dir: 1 | -1) => {
@@ -46,6 +57,30 @@ export default function TopBar(props: {
   const doMerge = async () => {
     const picked = await openDialog({ filters: [{ name: "PDF", extensions: ["pdf"] }] });
     if (typeof picked === "string") await mergeWith(picked);
+  };
+
+  const doInsertImage = async () => {
+    const picked = await openDialog({
+      filters: [{ name: "Imagem", extensions: ["png", "jpg", "jpeg"] }],
+    });
+    if (typeof picked !== "string") return;
+    const bytes = await readFileBytes(picked);
+    const mime = picked.toLowerCase().endsWith(".png") ? "image/png" : "image/jpeg";
+    let bin = "";
+    const CHUNK = 0x8000;
+    for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+    const dataUrl = `data:${mime};base64,${btoa(bin)}`;
+    const img = new Image();
+    img.onload = () => setPendingImage({ dataUrl, aspect: img.naturalHeight / img.naturalWidth || 1 });
+    img.src = dataUrl;
+  };
+
+  const goToPage = (raw: string) => {
+    setPageInput(null);
+    const n = parseInt(raw, 10);
+    if (isNaN(n)) return;
+    const i = Math.max(0, Math.min(pageCount - 1, n - 1));
+    window.dispatchEvent(new CustomEvent("localpdf:scroll-to", { detail: i }));
   };
 
   const fileName = filePath ? filePath.replace(/^.*[\\/]/, "") : "";
@@ -98,12 +133,69 @@ export default function TopBar(props: {
                 />
               ))}
             </span>
+            {tool === "text" && (
+              <select
+                className="tb-select"
+                value={fontSize}
+                onChange={(e) => setFontSize(Number(e.target.value))}
+                title="Tamanho da fonte"
+              >
+                {[10, 12, 14, 18, 24, 32, 48].map((n) => (
+                  <option key={n} value={n}>
+                    {n} pt
+                  </option>
+                ))}
+              </select>
+            )}
+            {tool === "ink" && (
+              <select
+                className="tb-select"
+                value={strokeWidth}
+                onChange={(e) => setStrokeWidth(Number(e.target.value))}
+                title="Espessura do traço"
+              >
+                {[1, 2, 3, 5, 8].map((n) => (
+                  <option key={n} value={n}>
+                    {n} pt
+                  </option>
+                ))}
+              </select>
+            )}
+            <span className="tb-sep" />
+            <button
+              className={pendingImage ? "active" : ""}
+              onClick={() => setSigOpen(true)}
+              title="Assinar: desenhe uma vez, carimbe onde quiser"
+            >
+              ✍ Assinar
+            </button>
+            <button onClick={doInsertImage} title="Carimbar uma imagem (PNG/JPG) na página">
+              🖼
+            </button>
+            {pendingImage && <span className="tb-hint">clique na página pra posicionar</span>}
           </div>
 
           <div className="tb-group tb-right">
-            <span className="tb-page">
-              p. {Math.min(current + 1, pageCount)} / {pageCount}
-            </span>
+            {pageInput !== null ? (
+              <input
+                className="tb-page-input"
+                autoFocus
+                defaultValue={pageInput}
+                onBlur={(e) => goToPage(e.target.value)}
+                onKeyDown={(e) => {
+                  if (e.key === "Enter") goToPage((e.target as HTMLInputElement).value);
+                  if (e.key === "Escape") setPageInput(null);
+                }}
+              />
+            ) : (
+              <button
+                className="tb-page"
+                onClick={() => setPageInput(String(current + 1))}
+                title="Ir para a página…"
+              >
+                p. {Math.min(current + 1, pageCount)} / {pageCount}
+              </button>
+            )}
             <button onClick={() => bumpZoom(-1)} title="Reduzir zoom">
               −
             </button>
@@ -132,6 +224,7 @@ export default function TopBar(props: {
           <span className="tb-file" title={filePath ?? ""}>
             {fileName}
           </span>
+          {sigOpen && <SignatureModal onClose={() => setSigOpen(false)} />}
         </>
       )}
     </header>
