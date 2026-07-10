@@ -4,7 +4,7 @@ import { readFileBytes } from "../lib/backend";
 import { cycleTheme, getThemePref, type ThemePref } from "../lib/theme";
 import { useStore } from "../state/store";
 import type { SidePanel } from "../App";
-import type { Tool } from "../lib/types";
+import type { Annot, PdfFont, Tool } from "../lib/types";
 import SignatureModal from "./SignatureModal";
 
 const TOOLS: { id: Tool; icon: string; label: string }[] = [
@@ -17,6 +17,11 @@ const TOOLS: { id: Tool; icon: string; label: string }[] = [
 
 const COLORS = ["#facc15", "#4ade80", "#60a5fa", "#f87171", "#111111"];
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+const FONTS: { id: PdfFont; label: string }[] = [
+  { id: "helvetica", label: "Helvetica" },
+  { id: "times", label: "Times" },
+  { id: "courier", label: "Courier" },
+];
 const THEME_ICON: Record<ThemePref, string> = { system: "🌓", light: "☀", dark: "🌙" };
 const THEME_LABEL: Record<ThemePref, string> = { system: "sistema", light: "claro", dark: "escuro" };
 
@@ -51,6 +56,26 @@ export default function TopBar(props: {
   const setStrokeWidth = useStore((s) => s.setStrokeWidth);
   const pendingImage = useStore((s) => s.pendingImage);
   const setPendingImage = useStore((s) => s.setPendingImage);
+  const font = useStore((s) => s.font);
+  const setFont = useStore((s) => s.setFont);
+  // anotação selecionada (pra cor/fonte/tamanho agirem sobre ela e refletirem seus valores)
+  const selectedKind = useStore((s) => {
+    const sa = s.selectedAnnot;
+    if (!sa) return null;
+    return (s.annots[sa.page] ?? []).find((a) => a.id === sa.id)?.kind ?? null;
+  });
+  const selectedFont = useStore((s) => {
+    const sa = s.selectedAnnot;
+    if (!sa) return null;
+    const a = (s.annots[sa.page] ?? []).find((x) => x.id === sa.id);
+    return a?.kind === "text" ? (a.font ?? "helvetica") : null;
+  });
+  const selectedSize = useStore((s) => {
+    const sa = s.selectedAnnot;
+    if (!sa) return null;
+    const a = (s.annots[sa.page] ?? []).find((x) => x.id === sa.id);
+    return a?.kind === "text" ? a.size : a?.kind === "ink" ? a.width : null;
+  });
   const [sigOpen, setSigOpen] = useState(false);
   const [pageInput, setPageInput] = useState<string | null>(null);
   const [theme, setTheme] = useState<ThemePref>(getThemePref);
@@ -83,6 +108,35 @@ export default function TopBar(props: {
     img.src = dataUrl;
   };
 
+  /** Aplica um patch na anotação selecionada (com undo próprio). */
+  const applyToSelected = (patch: (a: Annot) => Annot | null) => {
+    const s = useStore.getState();
+    if (!s.selectedAnnot) return;
+    const a = (s.annots[s.selectedAnnot.page] ?? []).find((x) => x.id === s.selectedAnnot!.id);
+    if (!a) return;
+    const next = patch(a);
+    if (!next) return;
+    s.beginAnnotTx();
+    s.updateAnnot(s.selectedAnnot.page, next);
+  };
+
+  const pickColor = (c: string) => {
+    setColor(c);
+    applyToSelected((a) => ("color" in a && a.kind !== "redact" ? ({ ...a, color: c } as Annot) : null));
+  };
+  const pickFontSize = (n: number) => {
+    setFontSize(n);
+    applyToSelected((a) => (a.kind === "text" ? { ...a, size: n } : null));
+  };
+  const pickFont = (f: PdfFont) => {
+    setFont(f);
+    applyToSelected((a) => (a.kind === "text" ? { ...a, font: f } : null));
+  };
+  const pickStroke = (n: number) => {
+    setStrokeWidth(n);
+    applyToSelected((a) => (a.kind === "ink" ? { ...a, width: n } : null));
+  };
+
   const goToPage = (raw: string) => {
     setPageInput(null);
     const n = parseInt(raw, 10);
@@ -97,16 +151,16 @@ export default function TopBar(props: {
     <header className="topbar">
       <div className="tb-row">
         <button onClick={props.onOpen} title="Abrir PDF (Ctrl+O)">
-          📂 Abrir
+          📂<span className="lbl"> Abrir</span>
         </button>
         <button onClick={props.onSave} disabled={!doc || !!busy} title="Salvar (Ctrl+S) — grava as anotações no PDF">
-          💾 Salvar
+          💾<span className="lbl"> Salvar</span>
         </button>
         <button onClick={props.onSaveAs} disabled={!doc || !!busy} title="Salvar como (Ctrl+Shift+S)">
-          Salvar como
+          💾<span className="lbl"> Salvar como</span><span className="lbl-mini">…</span>
         </button>
         <button onClick={doMerge} disabled={!doc || !!busy} title="Acrescentar as páginas de outro PDF ao fim">
-          ➕ Mesclar
+          ➕<span className="lbl"> Mesclar</span>
         </button>
         <span className="tb-sep" />
         <button onClick={undo} disabled={!canUndo || !!busy} title="Desfazer (Ctrl+Z)">
@@ -170,21 +224,21 @@ export default function TopBar(props: {
               onClick={() => props.setPanel(props.panel === "ocr" ? "none" : "ocr")}
               title="OCR: reconhecer texto de PDF escaneado (offline)"
             >
-              🔍 OCR
+              🔍<span className="lbl"> OCR</span>
             </button>
             <button
               className={props.panel === "forms" ? "active" : ""}
               onClick={() => props.setPanel(props.panel === "forms" ? "none" : "forms")}
               title="Preencher formulário (AcroForm)"
             >
-              📝 Formulário
+              📝<span className="lbl"> Formulário</span>
             </button>
             <button
               className={props.panel === "ai" ? "active" : ""}
               onClick={() => props.setPanel(props.panel === "ai" ? "none" : "ai")}
               title="IA local: resumir e perguntar sobre o documento"
             >
-              ✦ IA
+              ✦<span className="lbl"> IA</span>
             </button>
           </span>
         )}
@@ -210,30 +264,47 @@ export default function TopBar(props: {
                 key={c}
                 className={`tb-color ${color === c ? "active" : ""}`}
                 style={{ background: c }}
-                onClick={() => setColor(c)}
-                title={`Cor ${c}`}
+                onClick={() => pickColor(c)}
+                title={selectedKind ? "Aplicar cor à anotação selecionada" : `Cor ${c}`}
               />
             ))}
           </span>
-          {tool === "text" && (
-            <select
-              className="tb-select"
-              value={fontSize}
-              onChange={(e) => setFontSize(Number(e.target.value))}
-              title="Tamanho da fonte"
-            >
-              {[10, 12, 14, 18, 24, 32, 48].map((n) => (
-                <option key={n} value={n}>
-                  {n} pt
-                </option>
-              ))}
-            </select>
+          {(tool === "text" || selectedKind === "text") && (
+            <>
+              <select
+                className="tb-select"
+                value={selectedKind === "text" ? (selectedFont ?? font) : font}
+                onChange={(e) => pickFont(e.target.value as PdfFont)}
+                title="Fonte (padrão do PDF — abre igual em qualquer leitor)"
+              >
+                {FONTS.map((f) => (
+                  <option key={f.id} value={f.id}>
+                    {f.label}
+                  </option>
+                ))}
+              </select>
+              <select
+                className="tb-select"
+                value={selectedKind === "text" ? (selectedSize ?? fontSize) : fontSize}
+                onChange={(e) => pickFontSize(Number(e.target.value))}
+                title="Tamanho da fonte"
+              >
+                {[10, 12, 14, 18, 24, 32, 48]
+                  .concat(selectedKind === "text" && selectedSize && ![10, 12, 14, 18, 24, 32, 48].includes(selectedSize) ? [selectedSize] : [])
+                  .sort((a, b) => a - b)
+                  .map((n) => (
+                    <option key={n} value={n}>
+                      {Math.round(n)} pt
+                    </option>
+                  ))}
+              </select>
+            </>
           )}
-          {tool === "ink" && (
+          {(tool === "ink" || selectedKind === "ink") && (
             <select
               className="tb-select"
-              value={strokeWidth}
-              onChange={(e) => setStrokeWidth(Number(e.target.value))}
+              value={selectedKind === "ink" ? (selectedSize ?? strokeWidth) : strokeWidth}
+              onChange={(e) => pickStroke(Number(e.target.value))}
               title="Espessura do traço"
             >
               {[1, 2, 3, 5, 8].map((n) => (
@@ -249,7 +320,7 @@ export default function TopBar(props: {
             onClick={() => setSigOpen(true)}
             title="Assinar: desenhe uma vez, carimbe onde quiser"
           >
-            ✍ Assinar
+            ✍<span className="lbl"> Assinar</span>
           </button>
           <button onClick={doInsertImage} title="Carimbar uma imagem (PNG/JPG) na página">
             🖼

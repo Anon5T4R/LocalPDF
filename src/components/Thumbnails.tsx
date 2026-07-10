@@ -1,5 +1,5 @@
 import { memo, useEffect, useRef, useState } from "react";
-import { renderPage } from "../lib/pdfjs";
+import { documentOutline, renderPage, type OutlineEntry } from "../lib/pdfjs";
 import { useStore } from "../state/store";
 import { pickSavePath } from "./TopBar";
 
@@ -33,13 +33,63 @@ const Thumb = memo(function Thumb(props: { index: number }) {
     return () => r.cancel();
   }, [visible, doc, docVersion, index, vp]);
 
-  const h = vp ? Math.round((vp.h / vp.w) * THUMB_W) : THUMB_W;
   return (
-    <div ref={wrapRef} className="thumb-canvas" style={{ width: THUMB_W, height: h }}>
+    <div
+      ref={wrapRef}
+      className="thumb-canvas"
+      style={{ aspectRatio: vp ? `${vp.w} / ${vp.h}` : "3 / 4" }}
+    >
       <canvas ref={canvasRef} />
     </div>
   );
 });
+
+/** Aba de sumário (capítulos do PDF, quando o documento tem outline). */
+function TocList() {
+  const doc = useStore((s) => s.doc);
+  const docVersion = useStore((s) => s.docVersion);
+  const current = useStore((s) => s.current);
+  const selectPage = useStore((s) => s.selectPage);
+  const [toc, setToc] = useState<OutlineEntry[] | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    setToc(null);
+    if (!doc) return;
+    documentOutline(doc).then((t) => {
+      if (!cancelled) setToc(t);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [doc, docVersion]);
+
+  const go = (e: OutlineEntry) => {
+    if (e.pageIndex < 0) return;
+    selectPage(e.pageIndex, false);
+    window.dispatchEvent(new CustomEvent("localpdf:scroll-to", { detail: e.pageIndex }));
+  };
+
+  if (!toc) return <div className="toc-empty muted small">Lendo sumário…</div>;
+  if (!toc.length) return <div className="toc-empty muted small">Este PDF não tem sumário (capítulos).</div>;
+  return (
+    <div className="toc-list">
+      {toc.map((e, i) => (
+        <button
+          key={i}
+          className={`toc-item ${e.pageIndex === current ? "active" : ""}`}
+          style={{ paddingLeft: 10 + e.level * 14 }}
+          onClick={() => go(e)}
+          disabled={e.pageIndex < 0}
+          title={e.pageIndex >= 0 ? `p. ${e.pageIndex + 1}` : "destino indisponível"}
+        >
+          <span className="toc-title">{e.title}</span>
+          {e.pageIndex >= 0 && <span className="toc-page">{e.pageIndex + 1}</span>}
+        </button>
+      ))}
+    </div>
+  );
+}
 
 export default function Thumbnails() {
   const pageCount = useStore((s) => s.vpSizes.length);
@@ -53,6 +103,7 @@ export default function Thumbnails() {
   const movePages = useStore((s) => s.movePages);
   const busy = useStore((s) => s.busy);
   const [dropAt, setDropAt] = useState<number | null>(null);
+  const [tab, setTab] = useState<"pages" | "toc">("pages");
   const dragSrc = useRef<number[]>([]);
 
   const go = (i: number, e: React.MouseEvent) => {
@@ -86,6 +137,18 @@ export default function Thumbnails() {
 
   return (
     <aside className="thumbs" onDrop={onDrop} onDragLeave={() => setDropAt(null)}>
+      <div className="thumbs-tabs">
+        <button className={tab === "pages" ? "active" : ""} onClick={() => setTab("pages")}>
+          Páginas
+        </button>
+        <button className={tab === "toc" ? "active" : ""} onClick={() => setTab("toc")}>
+          Sumário
+        </button>
+      </div>
+      {tab === "toc" ? (
+        <TocList />
+      ) : (
+        <>
       <div className="thumbs-list">
         {Array.from({ length: pageCount }, (_, i) => (
           <div
@@ -131,6 +194,8 @@ export default function Thumbnails() {
           🗑
         </button>
       </div>
+        </>
+      )}
     </aside>
   );
 }

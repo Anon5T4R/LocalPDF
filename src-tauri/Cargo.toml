@@ -1,6 +1,6 @@
 [package]
 name = "pdf"
-version = "0.2.0"
+version = "0.3.0"
 description = "LocalPDF — editor de PDF offline (visualizar, organizar páginas, anotar, formulários) com IA local"
 authors = ["Taylor"]
 edition = "2021"

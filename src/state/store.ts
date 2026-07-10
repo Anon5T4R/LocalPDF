@@ -9,8 +9,8 @@ import { create } from "zustand";
 import { loadPdf, type PDFDocumentProxy } from "../lib/pdfjs";
 import * as ops from "../lib/ops";
 import { readFileBytes, writeFileBytes } from "../lib/backend";
-import { viewportSize, type PageGeom } from "../lib/coords";
-import type { Annot, AnnotMap, OcrResult, PendingImage, Tool } from "../lib/types";
+import { rotateAnnots, viewportSize, type PageGeom } from "../lib/coords";
+import type { Annot, AnnotMap, OcrResult, PdfFont, PendingImage, Tool } from "../lib/types";
 
 interface Snapshot {
   bytes: Uint8Array;
@@ -37,6 +37,7 @@ export interface PdfStore {
   color: string;
   fontSize: number;
   strokeWidth: number;
+  font: PdfFont;
   annots: AnnotMap;
   selectedAnnot: { page: number; id: string } | null;
   /** assinatura/carimbo esperando o clique que posiciona na página */
@@ -62,6 +63,7 @@ export interface PdfStore {
   setColor(c: string): void;
   setFontSize(n: number): void;
   setStrokeWidth(n: number): void;
+  setFont(f: PdfFont): void;
   setCurrent(i: number): void;
   setError(e: string | null): void;
   selectPage(i: number, additive: boolean): void;
@@ -76,6 +78,13 @@ export interface PdfStore {
   updateAnnot(page: number, annot: Annot): void;
   removeAnnot(page: number, id: string): void;
   setSelectedAnnot(sel: { page: number; id: string } | null): void;
+  /**
+   * Marca o início de uma mudança de anotação que vai gerar vários
+   * updateAnnot (arrastar/redimensionar/editar) — empilha UM undo pro lote.
+   */
+  beginAnnotTx(): void;
+  /** Adiciona várias anotações como UMA entrada de undo (seleção→realce, edição de linha). */
+  addAnnotsBatch(items: { page: number; annot: Annot }[]): void;
 
   rotateSelected(delta: number): Promise<void>;
   deleteSelected(): Promise<void>;
@@ -92,6 +101,16 @@ async function parseBytes(bytes: Uint8Array) {
 }
 
 export const useStore = create<PdfStore>()((set, get) => {
+  /** Empilha o estado atual {bytes, annots} no undo (limpa o redo). */
+  function pushHistory() {
+    const s = get();
+    if (!s.bytes) return;
+    set({
+      undoStack: [...s.undoStack.slice(-UNDO_CAP + 1), { bytes: s.bytes, annots: s.annots }],
+      redoStack: [],
+    });
+  }
+
   /** Troca os bytes do documento (empilha undo, recarrega o pdf.js). */
   async function applyBytes(
     newBytes: Uint8Array,
@@ -157,6 +176,7 @@ export const useStore = create<PdfStore>()((set, get) => {
     color: "#facc15",
     fontSize: 14,
     strokeWidth: 2,
+    font: "helvetica",
     annots: {},
     selectedAnnot: null,
     pendingImage: null,
@@ -243,6 +263,15 @@ export const useStore = create<PdfStore>()((set, get) => {
         const s = get();
         const snap = s.undoStack[s.undoStack.length - 1];
         if (!snap || !s.bytes) return;
+        const stacks = {
+          undoStack: s.undoStack.slice(0, -1),
+          redoStack: [...s.redoStack, { bytes: s.bytes, annots: s.annots }],
+        };
+        if (snap.bytes === s.bytes) {
+          // só anotações mudaram — não precisa reparsear o documento
+          set({ annots: snap.annots, ...stacks, dirty: true, selectedAnnot: null });
+          return;
+        }
         const parsed = await parseBytes(snap.bytes);
         s.doc?.destroy().catch(() => {});
         set({
@@ -250,8 +279,7 @@ export const useStore = create<PdfStore>()((set, get) => {
           ...parsed,
           docVersion: s.docVersion + 1,
           annots: snap.annots,
-          undoStack: s.undoStack.slice(0, -1),
-          redoStack: [...s.redoStack, { bytes: s.bytes, annots: s.annots }],
+          ...stacks,
           dirty: true,
           selected: [],
           selectedAnnot: null,
@@ -263,6 +291,14 @@ export const useStore = create<PdfStore>()((set, get) => {
         const s = get();
         const snap = s.redoStack[s.redoStack.length - 1];
         if (!snap || !s.bytes) return;
+        const stacks = {
+          redoStack: s.redoStack.slice(0, -1),
+          undoStack: [...s.undoStack, { bytes: s.bytes, annots: s.annots }],
+        };
+        if (snap.bytes === s.bytes) {
+          set({ annots: snap.annots, ...stacks, dirty: true, selectedAnnot: null });
+          return;
+        }
         const parsed = await parseBytes(snap.bytes);
         s.doc?.destroy().catch(() => {});
         set({
@@ -270,8 +306,7 @@ export const useStore = create<PdfStore>()((set, get) => {
           ...parsed,
           docVersion: s.docVersion + 1,
           annots: snap.annots,
-          redoStack: s.redoStack.slice(0, -1),
-          undoStack: [...s.undoStack, { bytes: s.bytes, annots: s.annots }],
+          ...stacks,
           dirty: true,
           selected: [],
           selectedAnnot: null,
@@ -294,6 +329,7 @@ export const useStore = create<PdfStore>()((set, get) => {
     setColor: (color) => set({ color }),
     setFontSize: (fontSize) => set({ fontSize }),
     setStrokeWidth: (strokeWidth) => set({ strokeWidth }),
+    setFont: (font) => set({ font }),
     setCurrent: (current) => set({ current }),
     setError: (error) => set({ error }),
 
@@ -306,12 +342,15 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
     clearSelection: () => set({ selected: [] }),
 
-    addAnnot: (page, annot) =>
+    addAnnot: (page, annot) => {
+      pushHistory();
       set((s) => ({
         annots: { ...s.annots, [page]: [...(s.annots[page] ?? []), annot] },
         dirty: true,
-      })),
+      }));
+    },
     updateAnnot: (page, annot) =>
+      // sem push aqui: quem inicia a mudança chama beginAnnotTx() uma vez
       set((s) => ({
         annots: {
           ...s.annots,
@@ -319,20 +358,45 @@ export const useStore = create<PdfStore>()((set, get) => {
         },
         dirty: true,
       })),
-    removeAnnot: (page, id) =>
+    removeAnnot: (page, id) => {
+      pushHistory();
       set((s) => ({
         annots: { ...s.annots, [page]: (s.annots[page] ?? []).filter((a) => a.id !== id) },
         selectedAnnot: s.selectedAnnot?.id === id ? null : s.selectedAnnot,
         dirty: true,
-      })),
+      }));
+    },
     setSelectedAnnot: (selectedAnnot) => set({ selectedAnnot }),
+    beginAnnotTx: () => pushHistory(),
+
+    addAnnotsBatch: (items) => {
+      if (!items.length) return;
+      pushHistory();
+      set((s) => {
+        const annots = { ...s.annots };
+        for (const { page, annot } of items) annots[page] = [...(annots[page] ?? []), annot];
+        return { annots, dirty: true };
+      });
+    },
 
     rotateSelected: (delta) =>
       run("girando", async () => {
-        const { bytes, selected, current } = get();
+        const { bytes, selected, current, geoms } = get();
         if (!bytes) return;
         const pages = selected.length ? selected : [current];
-        await applyBytes(await ops.rotatePages(bytes, pages, delta));
+        const rotated = new Set(pages);
+        const oldGeoms = geoms;
+        await applyBytes(await ops.rotatePages(bytes, pages, delta), {
+          // o viewport da página girada muda — reancora as anotações pendentes
+          remapAnnots: (annots) => {
+            const out: AnnotMap = {};
+            for (const [k, list] of Object.entries(annots)) {
+              const i = Number(k);
+              out[i] = rotated.has(i) && oldGeoms[i] ? rotateAnnots(list, oldGeoms[i], delta) : list;
+            }
+            return out;
+          },
+        });
       }),
 
     deleteSelected: () =>

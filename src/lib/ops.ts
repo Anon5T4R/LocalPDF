@@ -95,12 +95,20 @@ function pageGeom(doc: PDFDocument, index: number): PageGeom {
   return { w: width, h: height, rotation: normalizeRotation(page.getRotation().angle) };
 }
 
+const STD_FONT = {
+  helvetica: StandardFonts.Helvetica,
+  times: StandardFonts.TimesRoman,
+  courier: StandardFonts.Courier,
+} as const;
+
 /** "Queima" as anotações pendentes nas páginas (realce, texto, desenho). */
 export async function bakeAnnotations(bytes: Uint8Array, annots: AnnotMap): Promise<Uint8Array> {
   const entries = Object.entries(annots).filter(([, list]) => list.length > 0);
   if (!entries.length) return bytes;
   const doc = await load(bytes);
-  const font = await doc.embedFont(StandardFonts.Helvetica);
+  const fonts: Partial<Record<keyof typeof STD_FONT, Awaited<ReturnType<typeof doc.embedFont>>>> = {};
+  const getFont = async (key: keyof typeof STD_FONT = "helvetica") =>
+    (fonts[key] ??= await doc.embedFont(STD_FONT[key]));
 
   for (const [key, list] of entries) {
     const index = Number(key);
@@ -147,7 +155,7 @@ export async function bakeAnnotations(bytes: Uint8Array, annots: AnnotMap): Prom
           x: anchor.x,
           y: anchor.y,
           size: a.size,
-          font,
+          font: await getFont(a.font),
           color,
           lineHeight: a.size * 1.25,
           rotate: degrees(g.rotation),

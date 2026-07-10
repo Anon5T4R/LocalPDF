@@ -18,6 +18,15 @@ export interface HighlightAnnot {
   color: string;
 }
 
+/** Famílias padrão do PDF (não precisam ser embutidas — existem em todo leitor). */
+export type PdfFont = "helvetica" | "times" | "courier";
+
+export const FONT_CSS: Record<PdfFont, string> = {
+  helvetica: "Helvetica, Arial, sans-serif",
+  times: '"Times New Roman", Times, serif',
+  courier: '"Courier New", Courier, monospace',
+};
+
 export interface TextAnnot {
   id: string;
   kind: "text";
@@ -26,6 +35,8 @@ export interface TextAnnot {
   size: number; // tamanho da fonte em pontos
   color: string;
   text: string;
+  /** default: helvetica (annots antigas não têm o campo) */
+  font?: PdfFont;
 }
 
 export interface InkAnnot {

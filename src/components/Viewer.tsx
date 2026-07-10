@@ -2,7 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { renderPage, renderTextLayer } from "../lib/pdfjs";
 import { getPageItems, groupLines, hitLine, type TextLine } from "../lib/textcache";
 import { useStore } from "../state/store";
-import { newId, type Annot, type TextAnnot } from "../lib/types";
+import { FONT_CSS, newId, type Annot, type TextAnnot } from "../lib/types";
 
 // ---------------------------------------------------------------------------
 // camada de anotações de uma página (coords no espaço do viewport escala 1)
@@ -18,6 +18,9 @@ function AnnotLayer(props: { index: number; scale: number }) {
   const color = useStore((s) => s.color);
   const fontSize = useStore((s) => s.fontSize);
   const strokeWidth = useStore((s) => s.strokeWidth);
+  const font = useStore((s) => s.font);
+  const beginAnnotTx = useStore((s) => s.beginAnnotTx);
+  const addAnnotsBatch = useStore((s) => s.addAnnotsBatch);
   const annots = useStore((s) => s.annots[index] ?? NO_ANNOTS);
   const selectedAnnot = useStore((s) => s.selectedAnnot);
   const pendingImage = useStore((s) => s.pendingImage);
@@ -40,6 +43,8 @@ function AnnotLayer(props: { index: number; scale: number }) {
   const cancelLineRef = useRef(false);
   const moveRef = useRef<{ id: string; last: { x: number; y: number } } | null>(null);
   const resizeRef = useRef<{ id: string; last: { x: number; y: number } } | null>(null);
+  // um clique só seleciona; o undo do arrasto/resize é empilhado no 1º movimento
+  const txStartedRef = useRef(false);
 
   const toV = useCallback(
     (e: { clientX: number; clientY: number }) => {
@@ -84,7 +89,7 @@ function AnnotLayer(props: { index: number; scale: number }) {
     } else if (tool === "ink") {
       setInkPts([p]);
     } else if (tool === "text") {
-      const a: TextAnnot = { id: newId(), kind: "text", x: p.x, y: p.y, size: fontSize, color, text: "" };
+      const a: TextAnnot = { id: newId(), kind: "text", x: p.x, y: p.y, size: fontSize, color, text: "", font };
       addAnnot(index, a);
       setEditing(a.id);
       setSelectedAnnot({ page: index, id: a.id });
@@ -115,6 +120,10 @@ function AnnotLayer(props: { index: number; scale: number }) {
       m.last = p;
       const a = (useStore.getState().annots[index] ?? []).find((x) => x.id === m.id);
       if (!a || a.kind !== "image") return;
+      if (!txStartedRef.current) {
+        beginAnnotTx();
+        txStartedRef.current = true;
+      }
       const w = Math.max(16, a.w + dx);
       updateAnnot(index, { ...a, w, h: (w * a.h) / a.w });
     } else if (moveRef.current) {
@@ -125,6 +134,10 @@ function AnnotLayer(props: { index: number; scale: number }) {
       m.last = p;
       const a = (useStore.getState().annots[index] ?? []).find((x) => x.id === m.id);
       if (!a) return;
+      if (!txStartedRef.current) {
+        beginAnnotTx();
+        txStartedRef.current = true;
+      }
       if (a.kind === "ink") {
         updateAnnot(index, { ...a, points: a.points.map((q) => ({ x: q.x + dx, y: q.y + dy })) });
       } else {
@@ -149,6 +162,7 @@ function AnnotLayer(props: { index: number; scale: number }) {
     }
     moveRef.current = null;
     resizeRef.current = null;
+    txStartedRef.current = false;
   };
 
   const grabAnnot = (a: Annot) => (e: React.PointerEvent) => {
@@ -156,6 +170,7 @@ function AnnotLayer(props: { index: number; scale: number }) {
     e.stopPropagation();
     setSelectedAnnot({ page: index, id: a.id });
     moveRef.current = { id: a.id, last: toV(e) };
+    txStartedRef.current = false;
     try {
       // captura no PRÓPRIO elemento: os eventos borbulham até a camada mesmo
       // quando ela está com pointer-events none (modo selecionar)
@@ -167,35 +182,51 @@ function AnnotLayer(props: { index: number; scale: number }) {
 
   const commitText = (a: TextAnnot, text: string) => {
     setEditing(null);
-    if (!text.trim()) removeAnnot(index, a.id);
-    else updateAnnot(index, { ...a, text });
+    if (!text.trim()) {
+      removeAnnot(index, a.id);
+    } else if (text !== a.text) {
+      // edição de texto existente = uma entrada de undo (criação já empilhou a dela)
+      if (a.text) beginAnnotTx();
+      updateAnnot(index, { ...a, text });
+    }
   };
 
-  /** Edição de linha: cobre o original com tarja branca e redesenha o texto. */
+  /** Edição de linha: cobre o original com tarja branca e redesenha o texto.
+   *  Tarja + texto entram como UMA entrada de undo. */
   const commitLine = (line: TextLine, newText: string) => {
     setEditLine(null);
     if (newText === line.text) return;
     const pad = Math.max(1.5, line.h * 0.18);
-    addAnnot(index, {
-      id: newId(),
-      kind: "redact",
-      x: line.x - pad,
-      y: line.y - pad,
-      w: line.w + pad * 2,
-      h: line.h + pad * 2,
-      color: "#ffffff",
-    });
+    const items: { page: number; annot: Annot }[] = [
+      {
+        page: index,
+        annot: {
+          id: newId(),
+          kind: "redact",
+          x: line.x - pad,
+          y: line.y - pad,
+          w: line.w + pad * 2,
+          h: line.h + pad * 2,
+          color: "#ffffff",
+        },
+      },
+    ];
     if (newText.trim()) {
-      addAnnot(index, {
-        id: newId(),
-        kind: "text",
-        x: line.x,
-        y: line.y,
-        size: Math.round(line.h * 10) / 10,
-        color: "#111111",
-        text: newText,
+      items.push({
+        page: index,
+        annot: {
+          id: newId(),
+          kind: "text",
+          x: line.x,
+          y: line.y,
+          size: Math.round(line.h * 10) / 10,
+          color: "#111111",
+          text: newText,
+          font,
+        },
       });
     }
+    addAnnotsBatch(items);
   };
 
   const px = (v: number) => v * scale;
@@ -274,6 +305,7 @@ function AnnotLayer(props: { index: number; scale: number }) {
                     if (e.button !== 0) return;
                     e.stopPropagation();
                     resizeRef.current = { id: a.id, last: toV(e) };
+                    txStartedRef.current = false;
                     try {
                       (e.currentTarget as HTMLElement).setPointerCapture(e.pointerId);
                     } catch {
@@ -291,7 +323,13 @@ function AnnotLayer(props: { index: number; scale: number }) {
             <textarea
               key={a.id}
               className="an-text-edit"
-              style={{ left: px(a.x), top: px(a.y), fontSize: px(a.size), color: a.color }}
+              style={{
+                left: px(a.x),
+                top: px(a.y),
+                fontSize: px(a.size),
+                color: a.color,
+                fontFamily: FONT_CSS[a.font ?? "helvetica"],
+              }}
               defaultValue={a.text}
               autoFocus
               onBlur={(e) => commitText(a, e.target.value)}
@@ -306,9 +344,16 @@ function AnnotLayer(props: { index: number; scale: number }) {
           <div
             key={a.id}
             className={`an-text ${isSel ? "an-sel" : ""}`}
-            style={{ left: px(a.x), top: px(a.y), fontSize: px(a.size), color: a.color }}
+            style={{
+              left: px(a.x),
+              top: px(a.y),
+              fontSize: px(a.size),
+              color: a.color,
+              fontFamily: FONT_CSS[a.font ?? "helvetica"],
+            }}
             onPointerDown={grabAnnot(a)}
             onDoubleClick={() => tool === "select" && setEditing(a.id)}
+            title="Arraste pra mover; duplo clique pra editar"
           >
             {a.text}
           </div>
@@ -492,7 +537,7 @@ export default function Viewer() {
   const scale = zoom === "fit" ? fitScale : zoom;
 
   // seleção de texto (textLayer) → botão flutuante "Realçar"
-  const addAnnot = useStore((s) => s.addAnnot);
+  const addAnnotsBatch = useStore((s) => s.addAnnotsBatch);
   const color = useStore((s) => s.color);
   const [selBtn, setSelBtn] = useState<{ x: number; y: number } | null>(null);
 
@@ -522,6 +567,7 @@ export default function Viewer() {
       if (kept.some((k) => r.left >= k.left - 1 && r.right <= k.right + 1 && r.top >= k.top - 1 && r.bottom <= k.bottom + 1)) continue;
       kept.push(r);
     }
+    const items: { page: number; annot: Annot }[] = [];
     ref.current?.querySelectorAll<HTMLElement>(".page").forEach((pageEl) => {
       const pr = pageEl.getBoundingClientRect();
       const idx = Number(pageEl.dataset.page);
@@ -529,17 +575,21 @@ export default function Viewer() {
         const cx = (r.left + r.right) / 2;
         const cy = (r.top + r.bottom) / 2;
         if (cx < pr.left || cx > pr.right || cy < pr.top || cy > pr.bottom) continue;
-        addAnnot(idx, {
-          id: newId(),
-          kind: "highlight",
-          x: (r.left - pr.left) / scale,
-          y: (r.top - pr.top) / scale,
-          w: r.width / scale,
-          h: r.height / scale,
-          color,
+        items.push({
+          page: idx,
+          annot: {
+            id: newId(),
+            kind: "highlight",
+            x: (r.left - pr.left) / scale,
+            y: (r.top - pr.top) / scale,
+            w: r.width / scale,
+            h: r.height / scale,
+            color,
+          },
         });
       }
     });
+    addAnnotsBatch(items); // uma entrada de undo pro realce inteiro
     sel.removeAllRanges();
     setSelBtn(null);
   };

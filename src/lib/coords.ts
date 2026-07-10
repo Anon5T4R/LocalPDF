@@ -1,6 +1,8 @@
 // Conversão entre o espaço do viewport do pdf.js (escala 1, y pra baixo, com a
 // rotação da página aplicada) e o espaço do usuário do PDF (y pra cima, sem
 // rotação) — é onde o pdf-lib desenha.
+
+import type { Annot } from "./types";
 //
 // Derivado da matriz que o PageViewport do pdf.js monta pra cada rotação
 // (viewBox [0,0,W,H], escala 1, sem offset):
@@ -39,6 +41,47 @@ export function toPdfPoint(g: PageGeom, vx: number, vy: number): { x: number; y:
   }
 }
 
+/** Ponto no espaço do usuário do PDF → ponto do viewport (escala 1). Inverso de toPdfPoint. */
+export function fromPdfPoint(g: PageGeom, px: number, py: number): { x: number; y: number } {
+  switch (normalizeRotation(g.rotation)) {
+    case 0:
+      return { x: px, y: g.h - py };
+    case 90:
+      return { x: py, y: px };
+    case 180:
+      return { x: g.w - px, y: py };
+    case 270:
+      return { x: g.h - py, y: g.w - px };
+  }
+}
+
+/** Ponto do viewport com a geometria antiga → viewport com a nova (mesmo ponto físico da página). */
+export function remapPoint(
+  oldG: PageGeom,
+  newG: PageGeom,
+  x: number,
+  y: number
+): { x: number; y: number } {
+  const p = toPdfPoint(oldG, x, y);
+  return fromPdfPoint(newG, p.x, p.y);
+}
+
+/** Retângulo do viewport antigo → viewport novo (90°s mantêm eixos alinhados). */
+export function remapRect(
+  oldG: PageGeom,
+  newG: PageGeom,
+  r: { x: number; y: number; w: number; h: number }
+): { x: number; y: number; w: number; h: number } {
+  const a = remapPoint(oldG, newG, r.x, r.y);
+  const b = remapPoint(oldG, newG, r.x + r.w, r.y + r.h);
+  return {
+    x: Math.min(a.x, b.x),
+    y: Math.min(a.y, b.y),
+    w: Math.abs(a.x - b.x),
+    h: Math.abs(a.y - b.y),
+  };
+}
+
 /** Retângulo do viewport → retângulo PDF (x,y = canto inferior esquerdo, y pra cima). */
 export function toPdfRect(
   g: PageGeom,
@@ -55,6 +98,35 @@ export function toPdfRect(
     w: Math.abs(a.x - b.x),
     h: Math.abs(a.y - b.y),
   };
+}
+
+/**
+ * Remapeia as anotações pendentes de uma página que foi girada em `delta`°
+ * (as coords são do viewport, que muda com a rotação — sem isso elas
+ * "andariam" pela página). Realce/tarja/tinta seguem a área exata; texto e
+ * imagem mantêm dimensões e são reancorados pelo centro.
+ */
+export function rotateAnnots(list: Annot[], oldG: PageGeom, delta: number): Annot[] {
+  const newG: PageGeom = { ...oldG, rotation: normalizeRotation(oldG.rotation + delta) };
+  return list.map((a) => {
+    switch (a.kind) {
+      case "highlight":
+      case "redact": {
+        const r = remapRect(oldG, newG, a);
+        return { ...a, ...r };
+      }
+      case "ink":
+        return { ...a, points: a.points.map((p) => remapPoint(oldG, newG, p.x, p.y)) };
+      case "image": {
+        const c = remapPoint(oldG, newG, a.x + a.w / 2, a.y + a.h / 2);
+        return { ...a, x: c.x - a.w / 2, y: c.y - a.h / 2 };
+      }
+      case "text": {
+        const c = remapPoint(oldG, newG, a.x, a.y + a.size / 2);
+        return { ...a, x: c.x, y: c.y - a.size / 2 };
+      }
+    }
+  });
 }
 
 /** #rrggbb → componentes 0..1 (pro rgb() do pdf-lib). */

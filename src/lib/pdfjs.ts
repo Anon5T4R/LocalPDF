@@ -111,6 +111,37 @@ export function renderTextLayer(
   };
 }
 
+/** Entrada do sumário (outline/bookmarks) do PDF, achatada com nível. */
+export interface OutlineEntry {
+  title: string;
+  level: number;
+  pageIndex: number; // -1 = destino não resolvível
+}
+
+/** Sumário do documento (capítulos), quando o PDF tem outline. */
+export async function documentOutline(doc: PDFDocumentProxy): Promise<OutlineEntry[]> {
+  const raw = await doc.getOutline().catch(() => null);
+  if (!raw?.length) return [];
+  const out: OutlineEntry[] = [];
+  type Item = { title?: string; dest?: unknown; items?: Item[] };
+  const walk = async (items: Item[], level: number) => {
+    for (const it of items) {
+      let pageIndex = -1;
+      try {
+        let dest = it.dest;
+        if (typeof dest === "string") dest = await doc.getDestination(dest);
+        if (Array.isArray(dest) && dest[0]) pageIndex = await doc.getPageIndex(dest[0]);
+      } catch {
+        /* destino quebrado — mostra o título mesmo assim */
+      }
+      out.push({ title: it.title?.trim() || "(sem título)", level, pageIndex });
+      if (it.items?.length && level < 6) await walk(it.items, level + 1);
+    }
+  };
+  await walk(raw as Item[], 0);
+  return out;
+}
+
 /** Texto de todas as páginas (uma string por página). */
 export async function extractAllText(doc: PDFDocumentProxy): Promise<string[]> {
   const out: string[] = [];

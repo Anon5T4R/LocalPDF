@@ -29,7 +29,6 @@ export default function AiPanel() {
   const [note, setNote] = useState("");
   const [workingOn, setWorkingOn] = useState<string | null>(null);
   const abortRef = useRef<AbortController | null>(null);
-  const textCache = useRef<{ version: number; pages: string[] } | null>(null);
 
   useEffect(() => {
     llmStatus()
@@ -83,10 +82,10 @@ export default function AiPanel() {
 
   const getPages = async (): Promise<string[]> => {
     if (!doc) throw new Error("nenhum documento aberto");
-    if (textCache.current?.version === docVersion) return textCache.current.pages;
     setNote("extraindo texto do PDF…");
+    // sem cache local: o textcache já memoiza a extração por versão, e o OCR
+    // pode ter preenchido páginas desde a última chamada
     const pages = await getMergedPagesText(doc, docVersion, useStore.getState().ocrPages);
-    textCache.current = { version: docVersion, pages };
     setNote("");
     if (!pages.some((p) => p.trim())) {
       throw new Error("este PDF não tem texto extraível — é escaneado; rode o 🔍 OCR primeiro");

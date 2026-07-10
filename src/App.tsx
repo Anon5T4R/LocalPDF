@@ -111,6 +111,15 @@ export default function App() {
     };
   }, [openFile]);
 
+  // título da janela acompanha o arquivo aberto e o estado sujo
+  const dirtyForTitle = useStore((s) => s.dirty);
+  useEffect(() => {
+    if (!inTauri) return;
+    const name = filePath ? filePath.replace(/^.*[\\/]/, "") : "";
+    const title = name ? `${dirtyForTitle ? "● " : ""}${name} — LocalPDF` : "LocalPDF";
+    getCurrentWindow().setTitle(title).catch(() => {});
+  }, [filePath, dirtyForTitle]);
+
   // confirmar fechar com alterações não salvas
   useEffect(() => {
     if (!inTauri) return;
@@ -148,10 +157,22 @@ export default function App() {
         else doSave();
       } else if (mod && e.key.toLowerCase() === "z" && !editing) {
         e.preventDefault();
-        undo();
+        if (e.shiftKey) redo();
+        else undo();
       } else if (mod && e.key.toLowerCase() === "y" && !editing) {
         e.preventDefault();
         redo();
+      } else if (mod && (e.key === "=" || e.key === "+" || e.key === "-")) {
+        e.preventDefault();
+        const s = useStore.getState();
+        const cur = typeof s.zoom === "number" ? s.zoom : 1;
+        const next = e.key === "-" ? cur - 0.1 : cur + 0.1;
+        s.setZoom(Math.min(4, Math.max(0.25, Math.round(next * 100) / 100)));
+      } else if (e.key === "Escape" && !editing) {
+        const s = useStore.getState();
+        if (s.pendingImage) s.setPendingImage(null);
+        else if (s.selectedAnnot) s.setSelectedAnnot(null);
+        else if (s.tool !== "select") s.setTool("select");
       } else if (e.key === "Delete" && selectedAnnot && !editing) {
         removeAnnot(selectedAnnot.page, selectedAnnot.id);
       }
