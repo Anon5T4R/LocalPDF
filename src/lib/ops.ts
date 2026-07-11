@@ -159,6 +159,8 @@ export async function bakeAnnotations(bytes: Uint8Array, annots: AnnotMap): Prom
           color,
           lineHeight: a.size * 1.25,
           rotate: degrees(g.rotation),
+          // caixa com largura definida → quebra de linha igual à da tela
+          ...(a.w ? { maxWidth: a.w } : {}),
         });
       } else if (a.kind === "image") {
         const img = a.dataUrl.startsWith("data:image/jpeg")

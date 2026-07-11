@@ -39,6 +39,8 @@ function AnnotLayer(props: { index: number; scale: number }) {
   const [rubber, setRubber] = useState<{ x0: number; y0: number; x1: number; y1: number } | null>(null);
   const [inkPts, setInkPts] = useState<{ x: number; y: number }[] | null>(null);
   const [editing, setEditing] = useState<string | null>(null);
+  // a caixa em edição nasceu agora? (vazia ao fechar → descarta sem histórico)
+  const editingIsNewRef = useRef(false);
   const [editLine, setEditLine] = useState<TextLine | null>(null);
   const cancelLineRef = useRef(false);
   const moveRef = useRef<{ id: string; last: { x: number; y: number } } | null>(null);
@@ -76,6 +78,8 @@ function AnnotLayer(props: { index: number; scale: number }) {
       return;
     }
     if (tool === "edittext") {
+      // o default do mousedown roubaria o foco do input que vai abrir
+      e.preventDefault();
       // acha a linha de texto sob o clique e abre a edição inline
       if (!docForEdit) return;
       getPageItems(docForEdit, docVersion, index).then((items) => {
@@ -89,8 +93,17 @@ function AnnotLayer(props: { index: number; scale: number }) {
     } else if (tool === "ink") {
       setInkPts([p]);
     } else if (tool === "text") {
+      // sem preventDefault, o default do mousedown tira o foco do textarea
+      // recém-criado → blur imediato → a caixa vazia se auto-removia
+      e.preventDefault();
+      if (editing) {
+        // já digitando: clique fora FECHA a edição (não abre outra caixa)
+        finishEditing();
+        return;
+      }
       const a: TextAnnot = { id: newId(), kind: "text", x: p.x, y: p.y, size: fontSize, color, text: "", font };
       addAnnot(index, a);
+      editingIsNewRef.current = true;
       setEditing(a.id);
       setSelectedAnnot({ page: index, id: a.id });
       return; // sem captura: o textarea assume o foco
@@ -180,15 +193,37 @@ function AnnotLayer(props: { index: number; scale: number }) {
     }
   };
 
-  const commitText = (a: TextAnnot, text: string) => {
+  /**
+   * Fecha o editor da caixa de texto. O conteúdo já está no store (editor
+   * controlado, sincroniza a cada tecla) — aqui só resta o destino da caixa
+   * vazia: nova → descarta sem histórico; existente esvaziada → remove (undo).
+   */
+  const finishEditing = () => {
+    const id = editing;
+    if (!id) return;
+    const a = (useStore.getState().annots[index] ?? []).find((x) => x.id === id);
+    // captura a largura da caixa ANTES do textarea sumir (usuário pode ter redimensionado)
+    const el = ref.current?.querySelector<HTMLTextAreaElement>(".an-text-edit");
     setEditing(null);
-    if (!text.trim()) {
-      removeAnnot(index, a.id);
-    } else if (text !== a.text) {
-      // edição de texto existente = uma entrada de undo (criação já empilhou a dela)
-      if (a.text) beginAnnotTx();
-      updateAnnot(index, { ...a, text });
+    if (a?.kind === "text") {
+      if (!a.text.trim()) {
+        if (editingIsNewRef.current) useStore.getState().dropAnnot(index, id, true);
+        else removeAnnot(index, id);
+      } else if (el) {
+        const w = Math.max(24, (el.offsetWidth - 4) / scale);
+        if (Math.abs((a.w ?? 0) - w) > 1) updateAnnot(index, { ...a, w });
+      }
     }
+    editingIsNewRef.current = false;
+  };
+
+  /** Reabre a edição de uma caixa existente (com entrada de undo própria). */
+  const reopenEditor = (a: TextAnnot) => {
+    if (editing && editing !== a.id) finishEditing(); // fecha a anterior (limpa vazia)
+    if (a.text) beginAnnotTx();
+    editingIsNewRef.current = false;
+    setSelectedAnnot({ page: index, id: a.id });
+    setEditing(a.id);
   };
 
   /** Edição de linha: cobre o original com tarja branca e redesenha o texto.
@@ -326,13 +361,19 @@ function AnnotLayer(props: { index: number; scale: number }) {
               style={{
                 left: px(a.x),
                 top: px(a.y),
+                width: a.w ? px(a.w) + 4 : undefined,
                 fontSize: px(a.size),
                 color: a.color,
                 fontFamily: FONT_CSS[a.font ?? "helvetica"],
               }}
-              defaultValue={a.text}
+              value={a.text}
               autoFocus
-              onBlur={(e) => commitText(a, e.target.value)}
+              placeholder="Digite o texto…"
+              // editor CONTROLADO: cada tecla sincroniza no store — nada se
+              // perde se o foco escapar ou o editor trocar de caixa
+              onChange={(e) => updateAnnot(index, { ...a, text: e.target.value })}
+              onBlur={() => finishEditing()}
+              onPointerDown={(e) => e.stopPropagation()}
               onKeyDown={(e) => {
                 if (e.key === "Escape") (e.target as HTMLTextAreaElement).blur();
                 e.stopPropagation();
@@ -347,12 +388,22 @@ function AnnotLayer(props: { index: number; scale: number }) {
             style={{
               left: px(a.x),
               top: px(a.y),
+              width: a.w ? px(a.w) : undefined,
               fontSize: px(a.size),
               color: a.color,
               fontFamily: FONT_CSS[a.font ?? "helvetica"],
             }}
-            onPointerDown={grabAnnot(a)}
-            onDoubleClick={() => tool === "select" && setEditing(a.id)}
+            onPointerDown={(e) => {
+              if (tool === "text") {
+                // clicar numa caixa existente com a ferramenta ativa reabre a edição
+                e.stopPropagation();
+                e.preventDefault();
+                reopenEditor(a);
+                return;
+              }
+              grabAnnot(a)(e);
+            }}
+            onDoubleClick={() => tool === "select" && reopenEditor(a)}
             title="Arraste pra mover; duplo clique pra editar"
           >
             {a.text}

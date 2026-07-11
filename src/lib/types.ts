@@ -37,6 +37,8 @@ export interface TextAnnot {
   text: string;
   /** default: helvetica (annots antigas não têm o campo) */
   font?: PdfFont;
+  /** largura da caixa em pontos — o texto quebra dentro dela (sem = uma linha) */
+  w?: number;
 }
 
 export interface InkAnnot {

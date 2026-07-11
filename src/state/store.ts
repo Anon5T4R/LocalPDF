@@ -85,6 +85,11 @@ export interface PdfStore {
   beginAnnotTx(): void;
   /** Adiciona várias anotações como UMA entrada de undo (seleção→realce, edição de linha). */
   addAnnotsBatch(items: { page: number; annot: Annot }[]): void;
+  /**
+   * Descarta uma anotação SEM histórico — só pra caixa de texto nova que
+   * ficou vazia (popUndo remove também a entrada que a criação empilhou).
+   */
+  dropAnnot(page: number, id: string, popUndo: boolean): void;
 
   rotateSelected(delta: number): Promise<void>;
   deleteSelected(): Promise<void>;
@@ -378,6 +383,13 @@ export const useStore = create<PdfStore>()((set, get) => {
         return { annots, dirty: true };
       });
     },
+
+    dropAnnot: (page, id, popUndo) =>
+      set((s) => ({
+        annots: { ...s.annots, [page]: (s.annots[page] ?? []).filter((a) => a.id !== id) },
+        selectedAnnot: s.selectedAnnot?.id === id ? null : s.selectedAnnot,
+        undoStack: popUndo ? s.undoStack.slice(0, -1) : s.undoStack,
+      })),
 
     rotateSelected: (delta) =>
       run("girando", async () => {

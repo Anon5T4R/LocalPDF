@@ -119,6 +119,17 @@ describe("bakeAnnotations", () => {
       0: [
         { id: "h1", kind: "highlight", x: 10, y: 10, w: 120, h: 20, color: "#facc15" },
         { id: "t1", kind: "text", x: 40, y: 100, size: 14, color: "#111111", text: "Nota: revisão ação café" },
+        {
+          id: "t2",
+          kind: "text",
+          x: 40,
+          y: 200,
+          size: 12,
+          color: "#111111",
+          text: "caixa com largura definida que quebra linha quando o texto passa da borda",
+          font: "times",
+          w: 120,
+        },
         { id: "i1", kind: "ink", points: [{ x: 5, y: 5 }, { x: 50, y: 40 }, { x: 90, y: 10 }], color: "#f87171", width: 2 },
       ],
     });
