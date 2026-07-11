@@ -120,16 +120,33 @@ export default function App() {
     getCurrentWindow().setTitle(title).catch(() => {});
   }, [filePath, dirtyForTitle]);
 
-  // confirmar fechar com alterações não salvas
+  // Confirmar fechar com alterações não salvas.
+  // Registrar onCloseRequested transfere o fechamento pro JS (o wrapper chama
+  // window.destroy()) — por isso a capability core:window:allow-destroy é
+  // OBRIGATÓRIA, senão o X para de funcionar. preventDefault é chamado de
+  // forma síncrona (antes de qualquer await) pra não haver corrida, e o
+  // destroy explícito acontece só depois da resposta do usuário.
   useEffect(() => {
     if (!inTauri) return;
+    let deciding = false;
     const un = getCurrentWindow().onCloseRequested(async (e) => {
-      if (useStore.getState().dirty) {
+      if (!useStore.getState().dirty) return; // sem mudanças: fecha normal
+      e.preventDefault();
+      if (deciding) return; // já há um diálogo aberto (clicou no X de novo)
+      deciding = true;
+      try {
         const leave = await ask("Há alterações não salvas. Sair mesmo assim?", {
           title: "LocalPDF",
           kind: "warning",
+          okLabel: "Sair sem salvar",
+          cancelLabel: "Cancelar",
         });
-        if (!leave) e.preventDefault();
+        if (leave) await getCurrentWindow().destroy();
+      } catch {
+        // diálogo indisponível — nunca deixar o app impossível de fechar
+        await getCurrentWindow().destroy().catch(() => {});
+      } finally {
+        deciding = false;
       }
     });
     return () => {
