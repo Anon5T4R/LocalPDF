@@ -1,6 +1,6 @@
 # LocalPDF
 
-Editor de PDF **100% offline** com **IA local**, parte da suíte Taylor.
+Editor de PDF **100% offline** com **IA local**, parte da suíte Local.
 
 - **Visualizar** — renderização fiel com [pdf.js](https://mozilla.github.io/pdf.js/) (Mozilla), zoom, miniaturas, **seleção/cópia de texto** e **busca (Ctrl+F)** com destaque do trecho.
 - **Organizar páginas** — mesclar outro PDF, extrair/dividir, reordenar (arrastar miniaturas), rotacionar, excluir e inserir página em branco, com [pdf-lib](https://pdf-lib.js.org/) (MIT). Undo/redo.
