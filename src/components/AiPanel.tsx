@@ -10,6 +10,7 @@ import {
   type ModelInfo,
 } from "../lib/ai";
 import { getMergedPagesText } from "../lib/textcache";
+import { t } from "../lib/i18n";
 import { useStore } from "../state/store";
 
 const DIR_KEY = "localpdf.modelsDir";
@@ -65,7 +66,7 @@ export default function AiPanel() {
       const p = await startLlm(modelPath, 0, 4096);
       setPort(p);
       setRunning(true);
-      setNote(`IA no ar em 127.0.0.1:${p}`);
+      setNote(t("aip.onlineAt", { port: p }));
     } catch (e) {
       setNote(String(e));
     } finally {
@@ -77,18 +78,18 @@ export default function AiPanel() {
     abortRef.current?.abort();
     await stopLlm().catch(() => {});
     setRunning(false);
-    setNote("IA parada.");
+    setNote(t("aip.stopped"));
   };
 
   const getPages = async (): Promise<string[]> => {
-    if (!doc) throw new Error("nenhum documento aberto");
-    setNote("extraindo texto do PDF…");
+    if (!doc) throw new Error(t("aip.errNoDoc"));
+    setNote(t("aip.extracting"));
     // sem cache local: o textcache já memoiza a extração por versão, e o OCR
     // pode ter preenchido páginas desde a última chamada
     const pages = await getMergedPagesText(doc, docVersion, useStore.getState().ocrPages);
     setNote("");
     if (!pages.some((p) => p.trim())) {
-      throw new Error("este PDF não tem texto extraível — é escaneado; rode o 🔍 OCR primeiro");
+      throw new Error(t("aip.errNoText"));
     }
     return pages;
   };
@@ -117,7 +118,7 @@ export default function AiPanel() {
           if (d.content) setOutput((o) => o + d.content);
           if (d.reasoning) setNote(d.reasoning.trim());
         }, signal),
-      "resumo"
+      t("aip.workSummary")
     );
 
   const doAsk = () => {
@@ -128,21 +129,21 @@ export default function AiPanel() {
         askDoc(port, pages, q, (d) => {
           if (d.content) setOutput((o) => o + d.content);
         }, signal),
-      "pergunta"
+      t("aip.workQuestion")
     );
   };
 
   return (
     <aside className="side-panel ai-panel">
-      <h3>✦ IA local</h3>
+      <h3>{t("aip.title")}</h3>
 
       <div className="ai-setup">
-        <button onClick={pickDir} title="Pasta com modelos .gguf">
-          📁 {modelsDir ? modelsDir.replace(/^.*[\\/]/, "") : "Pasta de modelos"}
+        <button onClick={pickDir} title={t("aip.modelsDirTitle")}>
+          📁 {modelsDir ? modelsDir.replace(/^.*[\\/]/, "") : t("aip.modelsFolder")}
         </button>
         {models.length > 0 && (
           <select value={modelPath} onChange={(e) => setModelPath(e.target.value)}>
-            <option value="">— escolher modelo —</option>
+            <option value="">{t("aip.chooseModel")}</option>
             {models.map((m) => (
               <option key={m.path} value={m.path}>
                 {m.name} ({m.size_gb.toFixed(1)} GB)
@@ -152,21 +153,21 @@ export default function AiPanel() {
         )}
         {!running ? (
           <button className="primary" onClick={start} disabled={!modelPath || starting}>
-            {starting ? "iniciando…" : "▶ Iniciar IA"}
+            {starting ? t("aip.starting") : t("aip.start")}
           </button>
         ) : (
-          <button onClick={stop}>■ Parar IA</button>
+          <button onClick={stop}>{t("aip.stop")}</button>
         )}
       </div>
 
       <div className="ai-actions">
         <button onClick={doSummarize} disabled={!running || !!workingOn}>
-          Resumir documento
+          {t("aip.summarize")}
         </button>
         <div className="ai-ask">
           <input
             type="text"
-            placeholder="Pergunte sobre o documento…"
+            placeholder={t("aip.askPlaceholder")}
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
             onKeyDown={(e) => e.key === "Enter" && doAsk()}
@@ -178,19 +179,14 @@ export default function AiPanel() {
         </div>
         {workingOn && (
           <button onClick={() => abortRef.current?.abort()} className="ai-abort">
-            ✕ cancelar {workingOn}
+            {t("aip.cancel", { label: workingOn })}
           </button>
         )}
       </div>
 
       {note && <p className="muted small">{note}</p>}
       {output && <div className="ai-output">{output}</div>}
-      {!running && !output && (
-        <p className="muted small">
-          Aponte a pasta com modelos .gguf, escolha um e inicie. Tudo roda local (porta 8102+), nada sai da
-          máquina.
-        </p>
-      )}
+      {!running && !output && <p className="muted small">{t("aip.hint")}</p>}
     </aside>
   );
 }

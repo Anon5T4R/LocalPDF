@@ -2,6 +2,7 @@ import { memo, useCallback, useEffect, useRef, useState } from "react";
 import { renderPage, renderTextLayer } from "../lib/pdfjs";
 import { getPageItems, groupLines, hitLine, type TextLine } from "../lib/textcache";
 import { useStore } from "../state/store";
+import { t as tr } from "../lib/i18n";
 import { FONT_CSS, newId, type Annot, type TextAnnot } from "../lib/types";
 
 // ---------------------------------------------------------------------------
@@ -368,7 +369,7 @@ function AnnotLayer(props: { index: number; scale: number }) {
               }}
               value={a.text}
               autoFocus
-              placeholder="Digite o texto…"
+              placeholder={tr("viewer.textPlaceholder")}
               // editor CONTROLADO: cada tecla sincroniza no store — nada se
               // perde se o foco escapar ou o editor trocar de caixa
               onChange={(e) => updateAnnot(index, { ...a, text: e.target.value })}
@@ -404,7 +405,7 @@ function AnnotLayer(props: { index: number; scale: number }) {
               grabAnnot(a)(e);
             }}
             onDoubleClick={() => tool === "select" && reopenEditor(a)}
-            title="Arraste pra mover; duplo clique pra editar"
+            title={tr("viewer.textBoxTitle")}
           >
             {a.text}
           </div>
@@ -689,7 +690,7 @@ export default function Viewer() {
           onMouseDown={(e) => e.preventDefault()}
           onClick={highlightSelection}
         >
-          🖍 Realçar
+          {tr("viewer.highlight")}
         </button>
       )}
     </div>

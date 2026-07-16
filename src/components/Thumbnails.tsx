@@ -1,6 +1,7 @@
 import { memo, useEffect, useRef, useState } from "react";
 import { documentOutline, renderPage, type OutlineEntry } from "../lib/pdfjs";
 import { useStore } from "../state/store";
+import { t as tr } from "../lib/i18n";
 import { pickSavePath } from "./TopBar";
 
 const THUMB_W = 132;
@@ -70,8 +71,8 @@ function TocList() {
     window.dispatchEvent(new CustomEvent("localpdf:scroll-to", { detail: e.pageIndex }));
   };
 
-  if (!toc) return <div className="toc-empty muted small">Lendo sumário…</div>;
-  if (!toc.length) return <div className="toc-empty muted small">Este PDF não tem sumário (capítulos).</div>;
+  if (!toc) return <div className="toc-empty muted small">{tr("thumb.tocLoading")}</div>;
+  if (!toc.length) return <div className="toc-empty muted small">{tr("thumb.tocEmpty")}</div>;
   return (
     <div className="toc-list">
       {toc.map((e, i) => (
@@ -81,7 +82,7 @@ function TocList() {
           style={{ paddingLeft: 10 + e.level * 14 }}
           onClick={() => go(e)}
           disabled={e.pageIndex < 0}
-          title={e.pageIndex >= 0 ? `p. ${e.pageIndex + 1}` : "destino indisponível"}
+          title={e.pageIndex >= 0 ? tr("thumb.tocPage", { n: e.pageIndex + 1 }) : tr("thumb.tocUnavailable")}
         >
           <span className="toc-title">{e.title}</span>
           {e.pageIndex >= 0 && <span className="toc-page">{e.pageIndex + 1}</span>}
@@ -129,7 +130,7 @@ export default function Thumbnails() {
   };
 
   const doExtract = async () => {
-    const path = await pickSavePath("paginas-extraidas.pdf");
+    const path = await pickSavePath(tr("thumb.extractName"));
     if (path) await extractSelected(path);
   };
 
@@ -139,10 +140,10 @@ export default function Thumbnails() {
     <aside className="thumbs" onDrop={onDrop} onDragLeave={() => setDropAt(null)}>
       <div className="thumbs-tabs">
         <button className={tab === "pages" ? "active" : ""} onClick={() => setTab("pages")}>
-          Páginas
+          {tr("thumb.tabPages")}
         </button>
         <button className={tab === "toc" ? "active" : ""} onClick={() => setTab("toc")}>
-          Sumário
+          {tr("thumb.tabToc")}
         </button>
       </div>
       {tab === "toc" ? (
@@ -170,26 +171,26 @@ export default function Thumbnails() {
         ))}
       </div>
       <div className="thumbs-tools">
-        <button onClick={() => rotateSelected(-90)} disabled={!!busy} title={`Girar ${nSel} página(s) à esquerda`}>
+        <button onClick={() => rotateSelected(-90)} disabled={!!busy} title={tr("thumb.rotateLeft", { n: nSel })}>
           ⟲
         </button>
-        <button onClick={() => rotateSelected(90)} disabled={!!busy} title={`Girar ${nSel} página(s) à direita`}>
+        <button onClick={() => rotateSelected(90)} disabled={!!busy} title={tr("thumb.rotateRight", { n: nSel })}>
           ⟳
         </button>
-        <button onClick={doExtract} disabled={!!busy} title={`Extrair ${nSel} página(s) pra um novo PDF`}>
+        <button onClick={doExtract} disabled={!!busy} title={tr("thumb.extract", { n: nSel })}>
           ⇱
         </button>
         <button
           onClick={() => insertBlankAfter(selected.length ? Math.max(...selected) : current)}
           disabled={!!busy}
-          title="Inserir página em branco depois da atual"
+          title={tr("thumb.insertBlank")}
         >
           ＋
         </button>
         <button
           onClick={deleteSelected}
           disabled={!!busy || pageCount <= 1}
-          title={`Excluir ${nSel} página(s)`}
+          title={tr("thumb.delete", { n: nSel })}
         >
           🗑
         </button>

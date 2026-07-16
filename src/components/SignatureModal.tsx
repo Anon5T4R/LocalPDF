@@ -3,6 +3,7 @@
 // guardada no localStorage pra reutilizar.
 
 import { useEffect, useRef, useState } from "react";
+import { t } from "../lib/i18n";
 import { useStore } from "../state/store";
 
 const SIG_KEY = "localpdf.signature";
@@ -113,13 +114,13 @@ export default function SignatureModal(props: { onClose: () => void }) {
   return (
     <div className="modal-backdrop" onClick={props.onClose}>
       <div className="modal" onClick={(e) => e.stopPropagation()}>
-        <h3>✍ Assinatura</h3>
+        <h3>{t("sig.title")}</h3>
         {saved && (
           <div className="sig-saved">
-            <img src={saved.dataUrl} alt="assinatura salva" />
+            <img src={saved.dataUrl} alt={t("sig.savedAlt")} />
             <div className="sig-saved-actions">
               <button className="primary" onClick={() => use(saved)}>
-                Usar a salva
+                {t("sig.useSaved")}
               </button>
               <button
                 onClick={() => {
@@ -127,12 +128,12 @@ export default function SignatureModal(props: { onClose: () => void }) {
                   setSaved(null);
                 }}
               >
-                🗑 Apagar
+                {t("sig.delete")}
               </button>
             </div>
           </div>
         )}
-        <p className="muted small">Desenhe abaixo (mouse ou caneta):</p>
+        <p className="muted small">{t("sig.drawHint")}</p>
         <canvas
           ref={canvasRef}
           className="sig-canvas"
@@ -144,12 +145,12 @@ export default function SignatureModal(props: { onClose: () => void }) {
         />
         <div className="modal-actions">
           <button onClick={clear} disabled={!hasStroke}>
-            Limpar
+            {t("sig.clear")}
           </button>
           <span style={{ flex: 1 }} />
-          <button onClick={props.onClose}>Cancelar</button>
+          <button onClick={props.onClose}>{t("sig.cancel")}</button>
           <button className="primary" onClick={useDrawn} disabled={!hasStroke}>
-            Usar → clique na página
+            {t("sig.use")}
           </button>
         </div>
       </div>

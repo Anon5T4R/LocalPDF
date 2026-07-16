@@ -2,28 +2,35 @@ import { useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readFileBytes } from "../lib/backend";
 import { cycleTheme, getThemePref, type ThemePref } from "../lib/theme";
+import { t as tr, type MessageKey } from "../lib/i18n";
 import { useStore } from "../state/store";
 import type { SidePanel } from "../App";
 import type { Annot, PdfFont, Tool } from "../lib/types";
 import SignatureModal from "./SignatureModal";
+import LocalePicker from "./LocalePicker";
 
-const TOOLS: { id: Tool; icon: string; label: string }[] = [
-  { id: "select", icon: "🖱", label: "Selecionar / mover — selecione texto e copie ou realce" },
-  { id: "highlight", icon: "🖍", label: "Realçar (arraste um retângulo)" },
-  { id: "text", icon: "🅣", label: "Caixa de texto (clique na página)" },
-  { id: "ink", icon: "✏", label: "Desenho à mão livre" },
-  { id: "edittext", icon: "✎", label: "Editar texto existente (beta) — clique numa linha" },
+const TOOLS: { id: Tool; icon: string; labelKey: MessageKey }[] = [
+  { id: "select", icon: "🖱", labelKey: "tool.select" },
+  { id: "highlight", icon: "🖍", labelKey: "tool.highlight" },
+  { id: "text", icon: "🅣", labelKey: "tool.text" },
+  { id: "ink", icon: "✏", labelKey: "tool.ink" },
+  { id: "edittext", icon: "✎", labelKey: "tool.edittext" },
 ];
 
 const COLORS = ["#facc15", "#4ade80", "#60a5fa", "#f87171", "#111111"];
 const ZOOMS = [0.5, 0.75, 1, 1.25, 1.5, 2, 3];
+// Nomes próprios das fontes padrão do PDF — NÃO traduzir.
 const FONTS: { id: PdfFont; label: string }[] = [
   { id: "helvetica", label: "Helvetica" },
   { id: "times", label: "Times" },
   { id: "courier", label: "Courier" },
 ];
 const THEME_ICON: Record<ThemePref, string> = { system: "🌓", light: "☀", dark: "🌙" };
-const THEME_LABEL: Record<ThemePref, string> = { system: "sistema", light: "claro", dark: "escuro" };
+const THEME_LABEL_KEY: Record<ThemePref, MessageKey> = {
+  system: "theme.system",
+  light: "theme.light",
+  dark: "theme.dark",
+};
 
 export default function TopBar(props: {
   onOpen: () => void;
@@ -94,7 +101,7 @@ export default function TopBar(props: {
 
   const doInsertImage = async () => {
     const picked = await openDialog({
-      filters: [{ name: "Imagem", extensions: ["png", "jpg", "jpeg"] }],
+      filters: [{ name: tr("tb.imgFilter"), extensions: ["png", "jpg", "jpeg"] }],
     });
     if (typeof picked !== "string") return;
     const bytes = await readFileBytes(picked);
@@ -150,34 +157,34 @@ export default function TopBar(props: {
   return (
     <header className="topbar">
       <div className="tb-row">
-        <button onClick={props.onOpen} title="Abrir PDF (Ctrl+O)">
-          📂<span className="lbl"> Abrir</span>
+        <button onClick={props.onOpen} title={tr("tb.openTitle")}>
+          📂<span className="lbl"> {tr("tb.open")}</span>
         </button>
-        <button onClick={props.onSave} disabled={!doc || !!busy} title="Salvar (Ctrl+S) — grava as anotações no PDF">
-          💾<span className="lbl"> Salvar</span>
+        <button onClick={props.onSave} disabled={!doc || !!busy} title={tr("tb.saveTitle")}>
+          💾<span className="lbl"> {tr("tb.save")}</span>
         </button>
-        <button onClick={props.onSaveAs} disabled={!doc || !!busy} title="Salvar como (Ctrl+Shift+S)">
-          💾<span className="lbl"> Salvar como</span><span className="lbl-mini">…</span>
+        <button onClick={props.onSaveAs} disabled={!doc || !!busy} title={tr("tb.saveAsTitle")}>
+          💾<span className="lbl"> {tr("tb.saveAs")}</span><span className="lbl-mini">…</span>
         </button>
-        <button onClick={doMerge} disabled={!doc || !!busy} title="Acrescentar as páginas de outro PDF ao fim">
-          ➕<span className="lbl"> Mesclar</span>
+        <button onClick={doMerge} disabled={!doc || !!busy} title={tr("tb.mergeTitle")}>
+          ➕<span className="lbl"> {tr("tb.merge")}</span>
         </button>
         <span className="tb-sep" />
-        <button onClick={undo} disabled={!canUndo || !!busy} title="Desfazer (Ctrl+Z)">
+        <button onClick={undo} disabled={!canUndo || !!busy} title={tr("tb.undoTitle")}>
           ↩
         </button>
-        <button onClick={redo} disabled={!canRedo || !!busy} title="Refazer (Ctrl+Y)">
+        <button onClick={redo} disabled={!canRedo || !!busy} title={tr("tb.redoTitle")}>
           ↪
         </button>
 
         <span className="tb-file" title={filePath ?? ""}>
           {fileName}
-          {dirty && <span className="tb-dirty" title="Alterações não salvas" />}
+          {dirty && <span className="tb-dirty" title={tr("tb.dirtyTitle")} />}
         </span>
 
         {doc && (
           <span className="tb-right">
-            <button onClick={props.onSearch} title="Buscar no documento (Ctrl+F)">
+            <button onClick={props.onSearch} title={tr("tb.searchTitle")}>
               🔎
             </button>
             {pageInput !== null ? (
@@ -192,20 +199,20 @@ export default function TopBar(props: {
                 }}
               />
             ) : (
-              <button className="tb-page" onClick={() => setPageInput(String(current + 1))} title="Ir para a página…">
-                p. {Math.min(current + 1, pageCount)} / {pageCount}
+              <button className="tb-page" onClick={() => setPageInput(String(current + 1))} title={tr("tb.goToPage")}>
+                {tr("tb.pageOf", { n: Math.min(current + 1, pageCount), total: pageCount })}
               </button>
             )}
-            <button onClick={() => bumpZoom(-1)} title="Reduzir zoom (Ctrl+roda)">
+            <button onClick={() => bumpZoom(-1)} title={tr("tb.zoomOut")}>
               −
             </button>
             <select
               className="tb-select"
               value={zoom === "fit" ? "fit" : String(zoomNum)}
               onChange={(e) => setZoom(e.target.value === "fit" ? "fit" : Number(e.target.value))}
-              title="Zoom"
+              title={tr("tb.zoomTitle")}
             >
-              <option value="fit">ajustar</option>
+              <option value="fit">{tr("tb.fit")}</option>
               {ZOOMS.map((z) => (
                 <option key={z} value={z}>
                   {Math.round(z * 100)}%
@@ -215,47 +222,54 @@ export default function TopBar(props: {
                 <option value={zoomNum}>{Math.round(zoomNum * 100)}%</option>
               )}
             </select>
-            <button onClick={() => bumpZoom(1)} title="Aumentar zoom (Ctrl+roda)">
+            <button onClick={() => bumpZoom(1)} title={tr("tb.zoomIn")}>
               +
             </button>
             <span className="tb-sep" />
             <button
               className={props.panel === "ocr" ? "active" : ""}
               onClick={() => props.setPanel(props.panel === "ocr" ? "none" : "ocr")}
-              title="OCR: reconhecer texto de PDF escaneado (offline)"
+              title={tr("tb.ocrTitle")}
             >
-              🔍<span className="lbl"> OCR</span>
+              🔍<span className="lbl"> {tr("tb.ocr")}</span>
             </button>
             <button
               className={props.panel === "forms" ? "active" : ""}
               onClick={() => props.setPanel(props.panel === "forms" ? "none" : "forms")}
-              title="Preencher formulário (AcroForm)"
+              title={tr("tb.formsTitle")}
             >
-              📝<span className="lbl"> Formulário</span>
+              📝<span className="lbl"> {tr("tb.forms")}</span>
             </button>
             <button
               className={props.panel === "ai" ? "active" : ""}
               onClick={() => props.setPanel(props.panel === "ai" ? "none" : "ai")}
-              title="IA local: resumir e perguntar sobre o documento"
+              title={tr("tb.aiTitle")}
             >
-              ✦<span className="lbl"> IA</span>
+              ✦<span className="lbl"> {tr("tb.ai")}</span>
             </button>
           </span>
         )}
-        <button
-          className={doc ? "" : "tb-right"}
-          onClick={() => setTheme(cycleTheme())}
-          title={`Tema: ${THEME_LABEL[theme]} (clique pra alternar)`}
-        >
-          {THEME_ICON[theme]}
-        </button>
+        <span className={doc ? "" : "tb-right"} style={{ display: "flex", alignItems: "center", gap: 2 }}>
+          <LocalePicker />
+          <button
+            onClick={() => setTheme(cycleTheme())}
+            title={tr("theme.toggle", { theme: tr(THEME_LABEL_KEY[theme]) })}
+          >
+            {THEME_ICON[theme]}
+          </button>
+        </span>
       </div>
 
       {doc && (
         <div className="tb-row tb-tools">
-          {TOOLS.map((t) => (
-            <button key={t.id} className={tool === t.id ? "active" : ""} onClick={() => setTool(t.id)} title={t.label}>
-              {t.icon}
+          {TOOLS.map((tl) => (
+            <button
+              key={tl.id}
+              className={tool === tl.id ? "active" : ""}
+              onClick={() => setTool(tl.id)}
+              title={tr(tl.labelKey)}
+            >
+              {tl.icon}
             </button>
           ))}
           <span className="tb-colors">
@@ -265,7 +279,7 @@ export default function TopBar(props: {
                 className={`tb-color ${color === c ? "active" : ""}`}
                 style={{ background: c }}
                 onClick={() => pickColor(c)}
-                title={selectedKind ? "Aplicar cor à anotação selecionada" : `Cor ${c}`}
+                title={selectedKind ? tr("tb.colorApply") : tr("tb.color", { c })}
               />
             ))}
           </span>
@@ -275,7 +289,7 @@ export default function TopBar(props: {
                 className="tb-select"
                 value={selectedKind === "text" ? (selectedFont ?? font) : font}
                 onChange={(e) => pickFont(e.target.value as PdfFont)}
-                title="Fonte (padrão do PDF — abre igual em qualquer leitor)"
+                title={tr("tb.fontTitle")}
               >
                 {FONTS.map((f) => (
                   <option key={f.id} value={f.id}>
@@ -287,7 +301,7 @@ export default function TopBar(props: {
                 className="tb-select"
                 value={selectedKind === "text" ? (selectedSize ?? fontSize) : fontSize}
                 onChange={(e) => pickFontSize(Number(e.target.value))}
-                title="Tamanho da fonte"
+                title={tr("tb.fontSizeTitle")}
               >
                 {[10, 12, 14, 18, 24, 32, 48]
                   .concat(selectedKind === "text" && selectedSize && ![10, 12, 14, 18, 24, 32, 48].includes(selectedSize) ? [selectedSize] : [])
@@ -305,7 +319,7 @@ export default function TopBar(props: {
               className="tb-select"
               value={selectedKind === "ink" ? (selectedSize ?? strokeWidth) : strokeWidth}
               onChange={(e) => pickStroke(Number(e.target.value))}
-              title="Espessura do traço"
+              title={tr("tb.strokeTitle")}
             >
               {[1, 2, 3, 5, 8].map((n) => (
                 <option key={n} value={n}>
@@ -318,16 +332,16 @@ export default function TopBar(props: {
           <button
             className={pendingImage ? "active" : ""}
             onClick={() => setSigOpen(true)}
-            title="Assinar: desenhe uma vez, carimbe onde quiser"
+            title={tr("tb.signTitle")}
           >
-            ✍<span className="lbl"> Assinar</span>
+            ✍<span className="lbl"> {tr("tb.sign")}</span>
           </button>
-          <button onClick={doInsertImage} title="Carimbar uma imagem (PNG/JPG) na página">
+          <button onClick={doInsertImage} title={tr("tb.imageTitle")}>
             🖼
           </button>
-          {pendingImage && <span className="tb-hint">clique na página pra posicionar</span>}
+          {pendingImage && <span className="tb-hint">{tr("tb.placeHint")}</span>}
           {tool === "edittext" && !pendingImage && (
-            <span className="tb-hint">clique numa linha de texto pra reescrever (beta)</span>
+            <span className="tb-hint">{tr("tb.editTextHint")}</span>
           )}
         </div>
       )}

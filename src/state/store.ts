@@ -10,6 +10,7 @@ import { loadPdf, type PDFDocumentProxy } from "../lib/pdfjs";
 import * as ops from "../lib/ops";
 import { readFileBytes, writeFileBytes } from "../lib/backend";
 import { rotateAnnots, viewportSize, type PageGeom } from "../lib/coords";
+import { t } from "../lib/i18n";
 import type { Annot, AnnotMap, OcrResult, PdfFont, PendingImage, Tool } from "../lib/types";
 
 interface Snapshot {
@@ -192,7 +193,7 @@ export const useStore = create<PdfStore>()((set, get) => {
     redoStack: [],
 
     openFile: (path) =>
-      run("abrindo", async () => {
+      run(t("busy.opening"), async () => {
         const bytes = await readFileBytes(path);
         await get().openBytes(bytes, path);
       }),
@@ -238,7 +239,7 @@ export const useStore = create<PdfStore>()((set, get) => {
     },
 
     save: () =>
-      run("salvando", async () => {
+      run(t("busy.saving"), async () => {
         const { bytes, annots, filePath } = get();
         if (!bytes || !filePath) return;
         const baked = await ops.bakeAnnotations(bytes, annots);
@@ -250,7 +251,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     saveAs: (path) =>
-      run("salvando", async () => {
+      run(t("busy.saving"), async () => {
         const { bytes, annots } = get();
         if (!bytes) return;
         const baked = await ops.bakeAnnotations(bytes, annots);
@@ -264,7 +265,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     undo: () =>
-      run("desfazendo", async () => {
+      run(t("busy.undoing"), async () => {
         const s = get();
         const snap = s.undoStack[s.undoStack.length - 1];
         if (!snap || !s.bytes) return;
@@ -292,7 +293,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     redo: () =>
-      run("refazendo", async () => {
+      run(t("busy.redoing"), async () => {
         const s = get();
         const snap = s.redoStack[s.redoStack.length - 1];
         if (!snap || !s.bytes) return;
@@ -325,7 +326,7 @@ export const useStore = create<PdfStore>()((set, get) => {
     setSearchFlash: (searchFlash) => set({ searchFlash }),
 
     makeSearchable: () =>
-      run("gravando texto pesquisável", async () => {
+      run(t("busy.searchableText"), async () => {
         const { bytes, ocrPages } = get();
         if (!bytes) return;
         const words = Object.fromEntries(Object.entries(ocrPages).map(([k, v]) => [k, v.words]));
@@ -392,7 +393,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       })),
 
     rotateSelected: (delta) =>
-      run("girando", async () => {
+      run(t("busy.rotating"), async () => {
         const { bytes, selected, current, geoms } = get();
         if (!bytes) return;
         const pages = selected.length ? selected : [current];
@@ -412,11 +413,11 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     deleteSelected: () =>
-      run("excluindo", async () => {
+      run(t("busy.deleting"), async () => {
         const { bytes, selected, current, vpSizes } = get();
         if (!bytes) return;
         const pages = selected.length ? selected : [current];
-        if (pages.length >= vpSizes.length) throw new Error("não dá pra excluir todas as páginas");
+        if (pages.length >= vpSizes.length) throw new Error(t("err.deleteAll"));
         const removed = new Set(pages);
         await applyBytes(await ops.deletePages(bytes, pages), {
           remapAnnots: (annots) => {
@@ -434,7 +435,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     movePages: (src, dest) =>
-      run("reordenando", async () => {
+      run(t("busy.reordering"), async () => {
         const { bytes, vpSizes } = get();
         if (!bytes) return;
         const n = vpSizes.length;
@@ -463,7 +464,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     insertBlankAfter: (index) =>
-      run("inserindo página", async () => {
+      run(t("busy.insertingPage"), async () => {
         const { bytes } = get();
         if (!bytes) return;
         const at = index + 1;
@@ -480,7 +481,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     mergeWith: (path) =>
-      run("mesclando", async () => {
+      run(t("busy.merging"), async () => {
         const { bytes } = get();
         if (!bytes) return;
         const other = await readFileBytes(path);
@@ -488,7 +489,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     extractSelected: (path) =>
-      run("extraindo", async () => {
+      run(t("busy.extracting"), async () => {
         const { bytes, selected, current } = get();
         if (!bytes) return;
         const pages = selected.length ? selected : [current];
@@ -497,7 +498,7 @@ export const useStore = create<PdfStore>()((set, get) => {
       }),
 
     applyFormValues: (values) =>
-      run("preenchendo", async () => {
+      run(t("busy.filling"), async () => {
         const { bytes } = get();
         if (!bytes) return;
         await applyBytes(await ops.fillForm(bytes, values));

@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import { listFormFields } from "../lib/ops";
 import type { FieldInfo } from "../lib/types";
+import { t } from "../lib/i18n";
 import { useStore } from "../state/store";
 
 export default function FormsPanel() {
@@ -32,12 +33,12 @@ export default function FormsPanel() {
     if (pendingCount) await applyFormValues(values);
   };
 
-  if (!fields) return <aside className="side-panel">Lendo campos…</aside>;
+  if (!fields) return <aside className="side-panel">{t("forms.reading")}</aside>;
 
   return (
     <aside className="side-panel">
-      <h3>📝 Formulário</h3>
-      {fields.length === 0 && <p className="muted">Este PDF não tem campos de formulário (AcroForm).</p>}
+      <h3>{t("forms.title")}</h3>
+      {fields.length === 0 && <p className="muted">{t("forms.none")}</p>}
       {fields.map((f) => {
         const cur = values[f.name] ?? f.value;
         switch (f.type) {
@@ -78,14 +79,14 @@ export default function FormsPanel() {
           default:
             return (
               <div key={f.name} className="form-field muted">
-                {f.name} (tipo não suportado)
+                {t("forms.unsupported", { name: f.name })}
               </div>
             );
         }
       })}
       {fields.length > 0 && (
         <button className="primary" onClick={apply} disabled={!pendingCount || !!busy}>
-          Aplicar no PDF {pendingCount ? `(${pendingCount})` : ""}
+          {t("forms.apply")} {pendingCount ? `(${pendingCount})` : ""}
         </button>
       )}
     </aside>

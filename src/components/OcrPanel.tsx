@@ -5,6 +5,7 @@
 import { useRef, useState } from "react";
 import { disposeOcr, ocrPage } from "../lib/ocr";
 import { getPagesText } from "../lib/textcache";
+import { t } from "../lib/i18n";
 import { useStore } from "../state/store";
 
 export default function OcrPanel() {
@@ -39,21 +40,17 @@ export default function OcrPanel() {
         targets.push(i);
       }
       if (!targets.length) {
-        setNote(
-          onlyScanned
-            ? "Nenhuma página sem texto — este PDF já é pesquisável."
-            : "Todas as páginas já foram reconhecidas."
-        );
+        setNote(onlyScanned ? t("ocr.noneScanned") : t("ocr.allDone"));
         return;
       }
       let n = 0;
       for (const i of targets) {
         if (cancelRef.current) break;
-        setProgress(`página ${i + 1} (${++n}/${targets.length})…`);
+        setProgress(t("ocr.pageProgress", { n: i + 1, done: ++n, total: targets.length }));
         const res = await ocrPage(doc, i, langs);
         setOcrPage(i, res);
       }
-      setNote(cancelRef.current ? "OCR cancelado." : "OCR concluído — busca e IA já enxergam o texto.");
+      setNote(cancelRef.current ? t("ocr.canceled") : t("ocr.finished"));
     } catch (e) {
       setNote(String(e));
     } finally {
@@ -64,47 +61,42 @@ export default function OcrPanel() {
 
   return (
     <aside className="side-panel">
-      <h3>🔍 OCR (texto de PDF escaneado)</h3>
+      <h3>{t("ocr.title")}</h3>
       <label className="form-field form-check">
         <input type="checkbox" checked={langPor} onChange={(e) => setLangPor(e.target.checked)} />
-        <span>Português</span>
+        <span>{t("ocr.langPor")}</span>
       </label>
       <label className="form-field form-check">
         <input type="checkbox" checked={langEng} onChange={(e) => setLangEng(e.target.checked)} />
-        <span>Inglês</span>
+        <span>{t("ocr.langEng")}</span>
       </label>
       <label className="form-field form-check">
         <input type="checkbox" checked={onlyScanned} onChange={(e) => setOnlyScanned(e.target.checked)} />
-        <span>Só páginas sem texto</span>
+        <span>{t("ocr.onlyScanned")}</span>
       </label>
 
       {!progress ? (
         <button className="primary" onClick={run} disabled={!langs || !!busy}>
-          Reconhecer documento
+          {t("ocr.recognize")}
         </button>
       ) : (
         <>
-          <p className="muted small">Reconhecendo {progress}</p>
-          <button onClick={() => (cancelRef.current = true)}>✕ Cancelar</button>
+          <p className="muted small">{t("ocr.recognizing", { progress })}</p>
+          <button onClick={() => (cancelRef.current = true)}>{t("ocr.cancel")}</button>
         </>
       )}
 
       {donePages > 0 && (
         <>
-          <p className="muted small">
-            {donePages} página(s) reconhecida(s), {totalWords} palavra(s).
-          </p>
+          <p className="muted small">{t("ocr.doneStats", { pages: donePages, words: totalWords })}</p>
           <button className="primary" onClick={makeSearchable} disabled={!!busy || !!progress}>
-            Tornar pesquisável (texto invisível)
+            {t("ocr.makeSearchable")}
           </button>
-          <p className="muted small">
-            Grava o texto reconhecido como camada invisível — depois é só Salvar. O PDF fica pesquisável e
-            copiável em qualquer leitor.
-          </p>
+          <p className="muted small">{t("ocr.makeSearchableHint")}</p>
         </>
       )}
       {note && <p className="muted small">{note}</p>}
-      <p className="muted small">Tudo roda na sua máquina (tesseract embarcado). Nada é enviado pra fora.</p>
+      <p className="muted small">{t("ocr.footer")}</p>
     </aside>
   );
 }

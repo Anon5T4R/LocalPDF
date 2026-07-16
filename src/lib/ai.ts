@@ -5,6 +5,7 @@
 
 import { invoke } from "@tauri-apps/api/core";
 import { chunkPages, topChunks } from "./chunks";
+import { t as tr } from "./i18n";
 
 // --- Rust command wrappers (camelCase keys -> snake_case Rust params) ---
 
@@ -59,7 +60,7 @@ export async function streamChat(
     }),
     signal: opts.signal,
   });
-  if (!res.ok || !res.body) throw new Error(`a IA respondeu ${res.status}`);
+  if (!res.ok || !res.body) throw new Error(tr("ai.err.status", { status: res.status }));
 
   let inThink = false;
   const routeContent = (text: string) => {
@@ -117,16 +118,18 @@ async function chatOnce(port: number, messages: ChatMsg[], signal?: AbortSignal)
 // ações sobre o documento
 // ---------------------------------------------------------------------------
 
-const SYSTEM =
-  "Você é o assistente do LocalPDF, um leitor/editor de PDF offline. " +
-  "Responda em português, de forma direta, usando SOMENTE o conteúdo do documento fornecido. " +
-  "Quando citar algo, mencione a página (ex.: p. 3). Se a resposta não estiver no documento, diga isso.";
+// Prompt de sistema da IA — a PROSA é traduzida (a IA responde no idioma da
+// UI); resolvido em tempo de chamada porque o locale pode mudar sem reimportar.
+const system = () => tr("ai.system");
 
 /** Junta as páginas até um teto de caracteres; devolve null se estourar. */
 function joinIfSmall(pages: string[], cap: number): string | null {
   const total = pages.reduce((n, p) => n + p.length, 0);
   if (total > cap) return null;
-  return pages.map((p, i) => (p.trim() ? `[página ${i + 1}]\n${p.trim()}` : "")).filter(Boolean).join("\n\n");
+  return pages
+    .map((p, i) => (p.trim() ? `${tr("ai.pageLabel", { n: i + 1 })}\n${p.trim()}` : ""))
+    .filter(Boolean)
+    .join("\n\n");
 }
 
 /**
@@ -144,8 +147,8 @@ export async function summarizeDoc(
     await streamChat(
       port,
       [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: `Resuma o documento a seguir em alguns parágrafos, cobrindo os pontos principais:\n\n${whole}` },
+        { role: "system", content: system() },
+        { role: "user", content: tr("ai.summarizeWhole", { text: whole }) },
       ],
       onDelta,
       { signal }
@@ -164,36 +167,30 @@ export async function summarizeDoc(
       cur = "";
       firstPage = i + 1;
     }
-    if (t) cur += `[página ${i + 1}]\n${t}\n\n`;
+    if (t) cur += `${tr("ai.pageLabel", { n: i + 1 })}\n${t}\n\n`;
   }
   if (cur) blocks.push({ pages: `${firstPage}–${pages.length}`, text: cur });
 
   const partials: string[] = [];
   for (let i = 0; i < blocks.length; i++) {
-    onDelta({ reasoning: `resumindo bloco ${i + 1}/${blocks.length} (páginas ${blocks[i].pages})…\n` });
+    onDelta({ reasoning: tr("ai.blockProgress", { i: i + 1, total: blocks.length, pages: blocks[i].pages }) });
     const part = await chatOnce(
       port,
       [
-        { role: "system", content: SYSTEM },
-        { role: "user", content: `Resuma o trecho a seguir em poucas frases objetivas:\n\n${blocks[i].text}` },
+        { role: "system", content: system() },
+        { role: "user", content: tr("ai.summarizeBlock", { text: blocks[i].text }) },
       ],
       signal
     );
-    partials.push(`(páginas ${blocks[i].pages}) ${part}`);
+    partials.push(tr("ai.partialPrefix", { pages: blocks[i].pages, text: part }));
   }
 
   // reduce: combina os parciais com streaming
   await streamChat(
     port,
     [
-      { role: "system", content: SYSTEM },
-      {
-        role: "user",
-        content:
-          "Estes são resumos parciais de um documento, em ordem. Combine-os num resumo único e coerente, " +
-          "em alguns parágrafos:\n\n" +
-          partials.join("\n\n"),
-      },
+      { role: "system", content: system() },
+      { role: "user", content: tr("ai.combine", { partials: partials.join("\n\n") }) },
     ],
     onDelta,
     { signal }
@@ -210,15 +207,12 @@ export async function askDoc(
 ): Promise<void> {
   const chunks = chunkPages(pages);
   const picked = topChunks(question, chunks, 6000);
-  const context = picked.map((c) => `[página ${c.page + 1}] ${c.text}`).join("\n\n");
+  const context = picked.map((c) => `${tr("ai.pageLabel", { n: c.page + 1 })} ${c.text}`).join("\n\n");
   await streamChat(
     port,
     [
-      { role: "system", content: SYSTEM },
-      {
-        role: "user",
-        content: `Trechos do documento:\n\n${context}\n\nPergunta: ${question}`,
-      },
+      { role: "system", content: system() },
+      { role: "user", content: tr("ai.qa", { context, question }) },
     ],
     onDelta,
     { signal }

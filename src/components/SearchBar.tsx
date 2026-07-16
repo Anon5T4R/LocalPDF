@@ -3,6 +3,7 @@
 
 import { useCallback, useEffect, useRef, useState } from "react";
 import { getPageItems } from "../lib/textcache";
+import { t as tr } from "../lib/i18n";
 import { useStore } from "../state/store";
 
 interface Hit {
@@ -98,7 +99,7 @@ export default function SearchBar(props: { onClose: () => void }) {
       <input
         autoFocus
         type="text"
-        placeholder="Buscar no documento…"
+        placeholder={tr("search.placeholder")}
         value={q}
         onChange={(e) => setQ(e.target.value)}
         onKeyDown={(e) => {
@@ -112,10 +113,10 @@ export default function SearchBar(props: { onClose: () => void }) {
       <span className="search-count">
         {busy ? "…" : hits.length ? `${idx + 1}/${hits.length}` : q.trim().length >= 2 ? "0" : ""}
       </span>
-      <button onClick={() => goTo(hits, idx - 1)} disabled={!hits.length} title="Anterior (Shift+Enter)">
+      <button onClick={() => goTo(hits, idx - 1)} disabled={!hits.length} title={tr("search.prev")}>
         ↑
       </button>
-      <button onClick={() => goTo(hits, idx + 1)} disabled={!hits.length} title="Próximo (Enter)">
+      <button onClick={() => goTo(hits, idx + 1)} disabled={!hits.length} title={tr("search.next")}>
         ↓
       </button>
       <button
@@ -123,7 +124,7 @@ export default function SearchBar(props: { onClose: () => void }) {
           clearFlash();
           props.onClose();
         }}
-        title="Fechar (Esc)"
+        title={tr("search.close")}
       >
         ×
       </button>

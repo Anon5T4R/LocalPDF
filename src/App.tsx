@@ -4,6 +4,7 @@ import { getCurrentWindow } from "@tauri-apps/api/window";
 import { getCurrentWebview } from "@tauri-apps/api/webview";
 import { ask, open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { getStartupFile } from "./lib/backend";
+import { t } from "./lib/i18n";
 import { useStore } from "./state/store";
 import TopBar from "./components/TopBar";
 import Thumbnails from "./components/Thumbnails";
@@ -135,11 +136,11 @@ export default function App() {
       if (deciding) return; // já há um diálogo aberto (clicou no X de novo)
       deciding = true;
       try {
-        const leave = await ask("Há alterações não salvas. Sair mesmo assim?", {
+        const leave = await ask(t("app.confirmExit"), {
           title: "LocalPDF",
           kind: "warning",
-          okLabel: "Sair sem salvar",
-          cancelLabel: "Cancelar",
+          okLabel: t("app.exitOk"),
+          cancelLabel: t("common.cancel"),
         });
         if (leave) await getCurrentWindow().destroy();
       } catch {
