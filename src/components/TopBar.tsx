@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { open as openDialog, save as saveDialog } from "@tauri-apps/plugin-dialog";
 import { readFileBytes } from "../lib/backend";
-import { cycleTheme, getThemePref, type ThemePref } from "../lib/theme";
+import { getThemePref, setThemePref, THEME_PREFS, type ThemePref } from "../lib/theme";
 import { t as tr, type MessageKey } from "../lib/i18n";
 import { useStore } from "../state/store";
 import type { SidePanel } from "../App";
@@ -25,11 +25,25 @@ const FONTS: { id: PdfFont; label: string }[] = [
   { id: "times", label: "Times" },
   { id: "courier", label: "Courier" },
 ];
-const THEME_ICON: Record<ThemePref, string> = { system: "🌓", light: "☀", dark: "🌙" };
+const THEME_ICON: Record<ThemePref, string> = {
+  system: "🌓",
+  light: "☀",
+  dark: "🌙",
+  nature: "🌿",
+  darkblue: "🌊",
+  calmgreen: "🍃",
+  pastelpink: "🌸",
+  punkprincess: "💜",
+};
 const THEME_LABEL_KEY: Record<ThemePref, MessageKey> = {
   system: "theme.system",
   light: "theme.light",
   dark: "theme.dark",
+  nature: "theme.nature",
+  darkblue: "theme.darkblue",
+  calmgreen: "theme.calmgreen",
+  pastelpink: "theme.pastelpink",
+  punkprincess: "theme.punkprincess",
 };
 
 export default function TopBar(props: {
@@ -251,12 +265,23 @@ export default function TopBar(props: {
         )}
         <span className={doc ? "" : "tb-right"} style={{ display: "flex", alignItems: "center", gap: 2 }}>
           <LocalePicker />
-          <button
-            onClick={() => setTheme(cycleTheme())}
-            title={tr("theme.toggle", { theme: tr(THEME_LABEL_KEY[theme]) })}
+          <select
+            className="lang-select theme-select"
+            value={theme}
+            onChange={(e) => {
+              const next = e.target.value as ThemePref;
+              setThemePref(next);
+              setTheme(next);
+            }}
+            title={tr("theme.title")}
+            aria-label={tr("theme.title")}
           >
-            {THEME_ICON[theme]}
-          </button>
+            {THEME_PREFS.map((tp) => (
+              <option key={tp} value={tp}>
+                {THEME_ICON[tp]} {tr(THEME_LABEL_KEY[tp])}
+              </option>
+            ))}
+          </select>
         </span>
       </div>
 
