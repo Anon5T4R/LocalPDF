@@ -1,19 +1,42 @@
 /* LocalPDF — tema com tokens (claro/escuro via data-theme no <html>). */
 
+/* Mapa papel->cor da pass de suavização (o LocalPDF tem nomenclatura própria):
+     --bg-app                  = o --bg da spec  (fundo da aplicação)
+     --bg-bar / --bg-input     = o --panel       (superfície elevada; eram #ffffff)
+     --border / --border-bar   = o --border
+   Sem par na spec (deslocados junto, preservando matiz e escada):
+     --bg-panel, --bg-bar-hover, --bg-bar-active  -> ancorados no --bg-bar
+   PALCOS — --bg-viewer e --bg-thumbs NÃO entram na pass: são o palco do
+   documento/miniaturas, propositalmente escuros e tingidos por tema. Eles não
+   são o fundão da queixa; são justamente o que emoldura o papel branco do PDF
+   (o .page é #ffffff de verdade, porque é papel). Clarear o palco apagaria essa
+   moldura. Ficaram intactos em todos os temas — a paleta nova só mexeu na
+   luminância dentro do MESMO matiz, então o tingimento deles segue coerente. */
+/* Contraste do texto secundário (correção WCAG, 2026-07-17 — logo após a pass acima).
+   A ressalva "só superfície muda" do bloco anterior tem uma exceção: ao suavizar o
+   painel, o `--text-muted` passou a reprovar no AA (< 4.5:1) contra o `--bg-bar`
+   (a barra é a superfície mais clara onde ele aparece; o `--bg-panel` é mais
+   escuro, ou seja mais fácil). Cuidado com o nome: aqui o `--text-muted` É o
+   secundário — este app não tem terciário/faint, então nada a medir nessa faixa.
+   Em nature e pastelpink ele JÁ reprovava antes, contra o branco puro —
+   dívida pré-existente que a pass só deixou visível. Escurecemos mexendo apenas no
+   L* (Lab), com a/b intactos: o matiz de cada tema fica igual, só a luminância cai
+   o mínimo pra bater 4.5:1. Temas escuros não foram tocados — já passavam. */
+
 :root[data-theme="light"] {
-  --bg-app: #f4f5f8;
-  --bg-bar: #ffffff;
-  --bg-bar-hover: #eceef3;
-  --bg-bar-active: #e0e5f0;
-  --bg-panel: #fafbfc;
-  --bg-input: #ffffff;
+  --bg-app: #ebecef;
+  --bg-bar: #f8f9fc;
+  --bg-bar-hover: #e6e8ed;
+  --bg-bar-active: #dadfea;
+  --bg-panel: #f4f5f6;
+  --bg-input: #f8f9fc;
   --bg-viewer: #63697a;
   --bg-thumbs: #2b2f38;
   --text: #1f2430;
   --text-bar: #303646;
   --text-muted: #6b7280;
-  --border: #d8dbe2;
-  --border-bar: #e3e6ec;
+  --border: #d0d3da;
+  --border-bar: #dbdee3;
   --accent: #2563eb;
   --accent-hover: #1d4ed8;
   --accent-soft: rgba(37, 99, 235, 0.12);
@@ -21,20 +44,28 @@
   --shadow: 0 2px 10px rgba(0, 0, 0, 0.35);
 }
 
+/* §2: o quase-preto #16181d (L*8.2) subiu +5 L*; painel/barra/borda subiram
+   junto, preservando a escada app < panel < bar.
+   EXCEÇÃO ao "não mexer no palco": aqui o --bg-thumbs era, hex a hex, o mesmo
+   --bg-panel — neste tema ele não é palco escuro coisa nenhuma, é o painel.
+   Deixá-lo parado enquanto o --bg-app sobe pra L*13.2 inverteria a relação
+   (a tira de miniaturas ficaria MAIS escura que o fundo, L*12.3, e encostaria
+   nele). Então ele acompanha o painel, como sempre acompanhou. O --bg-viewer,
+   esse sim palco de verdade, ficou intacto. */
 :root[data-theme="dark"] {
-  --bg-app: #16181d;
-  --bg-bar: #23262e;
-  --bg-bar-hover: #343945;
-  --bg-bar-active: #414759;
-  --bg-panel: #1c1f26;
-  --bg-input: #23262e;
+  --bg-app: #202227;
+  --bg-bar: #2e3139;
+  --bg-bar-hover: #3f4451;
+  --bg-bar-active: #4d5365;
+  --bg-panel: #262931;
+  --bg-input: #2e3139;
   --bg-viewer: #33363f;
-  --bg-thumbs: #1c1f26;
+  --bg-thumbs: #262931;
   --text: #e6e8ee;
   --text-bar: #e6e8ee;
   --text-muted: #9aa2b1;
-  --border: #363b47;
-  --border-bar: #363b47;
+  --border: #414653;
+  --border-bar: #414653;
   --accent: #3b82f6;
   --accent-hover: #60a5fa;
   --accent-soft: rgba(96, 165, 250, 0.16);
@@ -44,20 +75,22 @@
 
 /* ---------- temas nomeados (paletas fixas) ---------- */
 
+/* §1 — hexes fixos da spec no --bg-app/--bg-bar/--bg-input/--border. Extras
+   (-panel/-hover/-active) deslocados junto do --bg-bar. Palcos intactos. */
 :root[data-theme="nature"] {
-  --bg-app: #f5f7f2;
-  --bg-bar: #ffffff;
-  --bg-bar-hover: #eef2ea;
-  --bg-bar-active: #e6efe1;
-  --bg-panel: #fafcf8;
-  --bg-input: #ffffff;
+  --bg-app: #eef1e9;
+  --bg-bar: #f8faf5;
+  --bg-bar-hover: #e8ece4;
+  --bg-bar-active: #e0e9db;
+  --bg-panel: #f4f6f2;
+  --bg-input: #f8faf5;
   --bg-viewer: #6b7a6c;
   --bg-thumbs: #2f3a30;
   --text: #2e3a2e;
   --text-bar: #2e3a2e;
-  --text-muted: #6f7d6f;
-  --border: #e2e8dd;
-  --border-bar: #e2e8dd;
+  --text-muted: #697669;
+  --border: #dbe3d4;
+  --border-bar: #dbe3d4;
   --accent: #7a9e7e;
   --accent-hover: #e8b4c8;
   --accent-soft: rgba(122, 158, 126, 0.16);
@@ -66,19 +99,19 @@
 }
 
 :root[data-theme="darkblue"] {
-  --bg-app: #0d1520;
-  --bg-bar: #131f30;
-  --bg-bar-hover: #1a2942;
-  --bg-bar-active: #1e3a5f;
-  --bg-panel: #101a28;
-  --bg-input: #131f30;
+  --bg-app: #16202e;
+  --bg-bar: #1d2a3c;
+  --bg-bar-hover: #26344e;
+  --bg-bar-active: #2c466c;
+  --bg-panel: #1b2533;
+  --bg-input: #1d2a3c;
   --bg-viewer: #223049;
   --bg-thumbs: #0a1019;
   --text: #e2e8f0;
   --text-bar: #e2e8f0;
   --text-muted: #8595ad;
-  --border: #223049;
-  --border-bar: #223049;
+  --border: #2d3f59;
+  --border-bar: #2d3f59;
   --accent: #3b82f6;
   --accent-hover: #60a5fa;
   --accent-soft: rgba(96, 165, 250, 0.16);
@@ -87,19 +120,19 @@
 }
 
 :root[data-theme="calmgreen"] {
-  --bg-app: #f2f5f1;
-  --bg-bar: #ffffff;
-  --bg-bar-hover: #e9efe7;
-  --bg-bar-active: #dcebd9;
-  --bg-panel: #f9fbf8;
-  --bg-input: #ffffff;
+  --bg-app: #eaf0e9;
+  --bg-bar: #f7faf6;
+  --bg-bar-hover: #e3e9e1;
+  --bg-bar-active: #d6e5d3;
+  --bg-panel: #f3f5f2;
+  --bg-input: #f7faf6;
   --bg-viewer: #66786a;
   --bg-thumbs: #2c3a2f;
   --text: #24302a;
   --text-bar: #24302a;
-  --text-muted: #6a7a6f;
-  --border: #dde6dc;
-  --border-bar: #dde6dc;
+  --text-muted: #67776c;
+  --border: #d5e0d3;
+  --border-bar: #d5e0d3;
   --accent: #4f7d5e;
   --accent-hover: #6fa07e;
   --accent-soft: rgba(79, 125, 94, 0.16);
@@ -108,19 +141,19 @@
 }
 
 :root[data-theme="pastelpink"] {
-  --bg-app: #fdf4f7;
-  --bg-bar: #ffffff;
-  --bg-bar-hover: #f9eaf0;
-  --bg-bar-active: #fbe4ee;
-  --bg-panel: #fefafb;
-  --bg-input: #ffffff;
+  --bg-app: #f8ebf0;
+  --bg-bar: #fdf6f9;
+  --bg-bar-hover: #f2e3e9;
+  --bg-bar-active: #f4dde7;
+  --bg-panel: #f7f3f4;
+  --bg-input: #fdf6f9;
   --bg-viewer: #9c8590;
   --bg-thumbs: #3a2a30;
   --text: #3a2a30;
   --text-bar: #3a2a30;
-  --text-muted: #8a7580;
-  --border: #f2dfe7;
-  --border-bar: #f2dfe7;
+  --text-muted: #806d77;
+  --border: #ecd3de;
+  --border-bar: #ecd3de;
   --accent: #e8799f;
   --accent-hover: #f4a9c4;
   --accent-soft: rgba(232, 121, 159, 0.16);
@@ -129,19 +162,19 @@
 }
 
 :root[data-theme="punkprincess"] {
-  --bg-app: #120a1a;
-  --bg-bar: #1a0f26;
-  --bg-bar-hover: #241533;
-  --bg-bar-active: #33143a;
-  --bg-panel: #160c20;
-  --bg-input: #1a0f26;
+  --bg-app: #1c1228;
+  --bg-bar: #251733;
+  --bg-bar-hover: #2e1e3d;
+  --bg-bar-active: #3e1e44;
+  --bg-panel: #1e1729;
+  --bg-input: #251733;
   --bg-viewer: #2c1c3d;
   --bg-thumbs: #0c0512;
   --text: #f0e6ff;
   --text-bar: #f0e6ff;
   --text-muted: #9a86b5;
-  --border: #2c1c3d;
-  --border-bar: #2c1c3d;
+  --border: #3a2850;
+  --border-bar: #3a2850;
   --accent: #ff2d95;
   --accent-hover: #2de2ff;
   --accent-soft: rgba(255, 45, 149, 0.18);
