@@ -1,5 +1,5 @@
 # Monta public/tesseract (gitignored): worker+core copiados do node_modules e
-# os idiomas por/eng baixados do nosso espelho. O vite empacota public/ no dist,
+# os idiomas por/eng/spa baixados do nosso espelho. O vite empacota public/ no dist,
 # então o OCR fica 100% offline no app final.
 # Usage: powershell -ExecutionPolicy Bypass -File scripts/fetch-tessdata.ps1
 $ErrorActionPreference = "Stop"
@@ -32,6 +32,7 @@ $tdVer = "87416418"  # prefixo do commit tessdata_fast espelhado
 $tdSha256 = @{
     "por" = "c4932b937207a9514b7514d518b931a99938c02a28a5a5a553f8599ed58b7deb"
     "eng" = "7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
+    "spa" = "6f2e04d02774a18f01bed44b1111f2cd7f3ba7ac9dc4373cd3f898a40ea6b464"
 }
 
 $root = Split-Path -Parent $PSScriptRoot
@@ -73,7 +74,7 @@ Get-ChildItem -Path $core -Filter "tesseract-core*" |
     Where-Object { $_.Name -notlike "*.wasm.js" } |
     Remove-Item -Force
 
-foreach ($l in @("por", "eng")) {
+foreach ($l in @("por", "eng", "spa")) {
     $out = Join-Path $lang "$l.traineddata"
     if (Test-Path $out) { Write-Host "$l.traineddata já existe"; continue }
     $url = "$tdMirror/tessdata_fast-$tdVer-$l.traineddata"

@@ -1,6 +1,7 @@
 #!/usr/bin/env bash
 # Monta public/tesseract (gitignored): worker+core do node_modules e os idiomas
-# por/eng do nosso espelho. O vite empacota public/ no dist → OCR 100% offline.
+# por/eng/spa do nosso espelho. O vite empacota public/ no dist → OCR 100%
+# offline.
 set -euo pipefail
 
 # ---------------------------------------------------------------------------
@@ -17,6 +18,7 @@ TD_MIRROR="https://github.com/Anon5T4R/Local-runtimes/releases/download/v1"
 TD_VER="87416418"  # prefixo do commit tessdata_fast espelhado
 TD_SHA_POR="c4932b937207a9514b7514d518b931a99938c02a28a5a5a553f8599ed58b7deb"
 TD_SHA_ENG="7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2"
+TD_SHA_SPA="6f2e04d02774a18f01bed44b1111f2cd7f3ba7ac9dc4373cd3f898a40ea6b464"
 
 root="$(cd "$(dirname "$0")/.." && pwd)"
 dest="$root/public/tesseract"
@@ -40,13 +42,14 @@ cp "$root"/node_modules/tesseract.js-core/tesseract-core*lstm*.wasm.js "$dest/co
 # então `git clean` não pega) e eles seguiriam entrando no dist.
 find "$dest/core" -name 'tesseract-core*' ! -name '*.wasm.js' -delete
 
-for l in por eng; do
+for l in por eng spa; do
   out="$dest/lang/$l.traineddata"
   if [ -f "$out" ]; then echo "$l.traineddata já existe"; continue; fi
 
   case "$l" in
     por) want="$TD_SHA_POR" ;;
     eng) want="$TD_SHA_ENG" ;;
+    spa) want="$TD_SHA_SPA" ;;
   esac
 
   echo "Baixando $l.traineddata ..."

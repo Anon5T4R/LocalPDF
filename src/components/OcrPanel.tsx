@@ -1,4 +1,4 @@
-// OCR offline (tesseract.js, por/eng). Reconhece páginas escaneadas; o texto
+// OCR offline (tesseract.js, por/eng/spa). Reconhece páginas escaneadas; o texto
 // alimenta busca e IA na hora, e "Tornar pesquisável" queima texto invisível
 // no PDF (persistido no Salvar).
 
@@ -18,12 +18,15 @@ export default function OcrPanel() {
 
   const [langPor, setLangPor] = useState(true);
   const [langEng, setLangEng] = useState(false);
+  const [langSpa, setLangSpa] = useState(false);
   const [onlyScanned, setOnlyScanned] = useState(true);
   const [progress, setProgress] = useState<string | null>(null);
   const [note, setNote] = useState("");
   const cancelRef = useRef(false);
 
-  const langs = [langPor && "por", langEng && "eng"].filter(Boolean).join("+");
+  const langs = [langPor && "por", langEng && "eng", langSpa && "spa"]
+    .filter(Boolean)
+    .join("+");
   const donePages = Object.keys(ocrPages).length;
   const totalWords = Object.values(ocrPages).reduce((n, r) => n + r.words.length, 0);
 
@@ -69,6 +72,10 @@ export default function OcrPanel() {
       <label className="form-field form-check">
         <input type="checkbox" checked={langEng} onChange={(e) => setLangEng(e.target.checked)} />
         <span>{t("ocr.langEng")}</span>
+      </label>
+      <label className="form-field form-check">
+        <input type="checkbox" checked={langSpa} onChange={(e) => setLangSpa(e.target.checked)} />
+        <span>{t("ocr.langSpa")}</span>
       </label>
       <label className="form-field form-check">
         <input type="checkbox" checked={onlyScanned} onChange={(e) => setOnlyScanned(e.target.checked)} />
