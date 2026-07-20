@@ -1,0 +1,68 @@
+Binários e dados de terceiros distribuídos com o LocalPDF
+========================================================
+
+O LocalPDF é software livre sob a licença MIT (veja o LICENSE na raiz do
+repositório). O instalador acompanha componentes de terceiros em versões NÃO
+MODIFICADAS. Cada um mantém a sua própria licença — o que segue cumpre as
+obrigações de quem os redistribui.
+
+
+1) llama.cpp — MIT
+------------------
+Runtime de inferência local (llama-server.exe e as bibliotecas ggml em
+binaries/llama/). Roda como PROCESSO SEPARADO (sidecar), invocado por linha de
+comando; o código do LocalPDF não faz linkagem com ele.
+
+  tag do upstream ... b10066
+  fonte ............. https://github.com/ggml-org/llama.cpp (tag b10066)
+  espelho ........... https://github.com/Anon5T4R/Local-runtimes (release v1)
+  sha256 (win) ...... 57cb5dd3143b2814b8d1d14587867628bfb126536abfa7085ca9560c4919d998
+
+  Texto da licença .. LICENSE-llama.cpp.txt
+
+  A MIT exige que o aviso de copyright e o texto da permissão acompanhem as
+  cópias do software, e os zips de release do llama.cpp NÃO trazem o LICENSE
+  dentro — por isso a cópia fica aqui, versionada.
+
+
+2) tessdata_fast (modelos de OCR) — Apache-2.0
+----------------------------------------------
+Modelos de idioma do Tesseract usados no OCR. Diferente do llama, estes NÃO são
+arquivos soltos no instalador: eles entram em public/tesseract/lang, o Vite os
+empacota no dist e o dist é compilado DENTRO do executável do app. Continuam
+sendo redistribuição, e a obrigação é a mesma.
+
+  idiomas ........... por, eng
+  commit do upstream  87416418 (prefixo)
+  fonte ............. https://github.com/tesseract-ocr/tessdata_fast
+  espelho ........... https://github.com/Anon5T4R/Local-runtimes (release v1)
+  sha256 (por) ...... c4932b937207a9514b7514d518b931a99938c02a28a5a5a553f8599ed58b7deb
+  sha256 (eng) ...... 7d4322bd2a7749724879683fc3912cb542f19906c83bcc1a52132556427170b2
+
+  Texto da licença .. LICENSE-Apache-2.0.txt
+
+
+3) tesseract.js e tesseract.js-core — Apache-2.0
+------------------------------------------------
+O worker e o core WebAssembly do OCR, copiados do node_modules pra
+public/tesseract e, como os modelos, embutidos no executável.
+
+  versão ............ tesseract.js 7.x (ver package.json / package-lock.json)
+  fonte ............. https://github.com/naptha/tesseract.js
+  Texto da licença .. LICENSE-Apache-2.0.txt (mesma licença do item 2; o texto
+                      da Apache-2.0 é único e vale pros dois)
+
+  A Apache-2.0 exige repassar a licença e, quando o projeto publica um arquivo
+  NOTICE, também o NOTICE. Nem o tessdata_fast nem o tesseract.js publicam
+  NOTICE (conferido em 2026-07-20), então o texto da licença basta.
+
+
+Por que estes textos são VERSIONADOS aqui
+------------------------------------------
+Nenhum dos downloads acima traz arquivo de licença dentro. Não há o que
+extrair — diferente do ffmpeg do BtbN, onde o LICENSE.txt vem no próprio zip e
+por isso é copiado de lá em vez de mantido como cópia nossa. Aqui as cópias
+ficam no repositório e o glob "third-party/*" do tauri.conf.json as empacota.
+
+Os modelos de linguagem (GGUF) NÃO acompanham o instalador: são baixados pelo
+usuário em tempo de execução e têm licença própria.
