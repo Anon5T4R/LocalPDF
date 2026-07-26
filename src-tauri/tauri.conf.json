@@ -37,7 +37,8 @@
         "ext": ["pdf"],
         "name": "Documento PDF",
         "description": "Documento PDF",
-        "role": "Editor"
+        "role": "Editor",
+        "mimeType": "application/pdf"
       }
     ],
     "icon": [
