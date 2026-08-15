@@ -2352,6 +2352,7 @@ name = "pdf"
 version = "0.5.13"
 dependencies = [
  "base64 0.22.1",
+ "gtk",
  "serde",
  "serde_json",
  "tauri",
